@@ -50,7 +50,9 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     # Raspberry Pi - install system packages first
     echo "Installing system packages..."
     sudo apt update -qq
-    sudo apt install -y python3-pip python3-opencv libatlas-base-dev
+    # Note: libatlas-base-dev is not available on Raspberry Pi OS Bookworm/ARM64
+    # Use OpenBLAS + LAPACK instead for NumPy/linear algebra support
+    sudo apt install -y python3-pip python3-opencv libopenblas-dev liblapack-dev
     
     # Install Python packages
     echo "Installing Python packages..."

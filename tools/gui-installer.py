@@ -288,7 +288,7 @@ Ready to begin?"""
                 ("Updating package list", "sudo apt-get update", 10),
                 ("Installing system packages",
                  "sudo apt-get install -y python3-pip python3-opencv python3-numpy python3-picamera2 "
-                 "python3-rpi.gpio libatlas-base-dev libopenblas-dev libraspberrypi-dev "
+                 "python3-rpi.gpio libopenblas-dev liblapack-dev libraspberrypi-dev "
                  "libcamera-dev libcamera-apps libmysqlclient-dev v4l-utils git dialog whiptail", 30),
                 ("Upgrading pip", "pip3 install --upgrade pip", 50),
                 ("Installing Python packages", f"pip3 install -r {self.project_dir}/requirements.txt", 70),

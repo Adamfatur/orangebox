@@ -50,8 +50,8 @@ sudo apt-get install -y \
     python3-numpy \
     python3-picamera2 \
     python3-rpi.gpio \
-    libatlas-base-dev \
     libopenblas-dev \
+    liblapack-dev \
     libhdf5-dev \
     libjpeg-dev \
     libpng-dev \
