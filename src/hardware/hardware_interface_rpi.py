@@ -89,6 +89,8 @@ class HardwareInterface:
         # State
         self.last_trigger_time = 0
         self.trigger_cooldown = 1.0
+        # Preview window name (for OpenCV display)
+        self.window_name = "Orange Box - Camera View"
         
         # Auto-detect camera if not specified
         if camera_index is None:
@@ -275,7 +277,7 @@ class HardwareInterface:
         except Exception as e:
             print(f"[ERROR] Camera capture failed: {e}")
             return None
-    
+
     def sort_to_bin_A(self):
         """
         Gerakkan servo ke Bin A (Organic).
@@ -334,7 +336,81 @@ class HardwareInterface:
             
         except Exception as e:
             print(f"[ERROR] Servo reset failed: {e}")
-    
+
+    def display_frame(self, frame: np.ndarray, text: str = "",
+                      prediction: Optional[dict] = None):
+        """
+        Tampilkan frame kamera dengan overlay informasi sederhana menggunakan OpenCV.
+
+        Args:
+            frame: Frame gambar (numpy array, BGR)
+            text: Teks status utama
+            prediction: Info status/prediksi (opsional)
+        """
+        try:
+            if frame is None:
+                return
+            import cv2
+            display = frame.copy()
+            h, w = display.shape[:2]
+
+            # Top bar background
+            cv2.rectangle(display, (0, 0), (w, 60), (40, 40, 45), -1)
+
+            # Title
+            cv2.putText(display, "Orange Box", (12, 28), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, (235, 235, 240), 2, cv2.LINE_AA)
+
+            # Determine status text
+            status_text = text.strip() if text else ""
+            if not status_text and prediction and isinstance(prediction, dict):
+                status_text = str(prediction.get("status", ""))
+            if status_text:
+                cv2.circle(display, (14, 46), 5, (0, 200, 255), -1)
+                cv2.putText(display, status_text, (26, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.55, (210, 210, 215), 1, cv2.LINE_AA)
+
+            # Draw bbox if provided
+            if prediction and isinstance(prediction, dict) and prediction.get("bbox"):
+                x1, y1, x2, y2 = prediction["bbox"]
+                cv2.rectangle(display, (x1, y1), (x2, y2), (0, 200, 255), 2)
+
+            # Show label & confidence (simple badge)
+            if prediction and isinstance(prediction, dict) and prediction.get("label"):
+                label = str(prediction.get("label", "")).upper()
+                conf = float(prediction.get("confidence", 0.0))
+                badge = f"{label}  {conf*100:.1f}%"
+                # Badge background
+                size, _ = cv2.getTextSize(badge, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                bx, by = 12, 68
+                bw, bh = size[0] + 16, size[1] + 14
+                cv2.rectangle(display, (bx, by), (bx+bw, by+bh), (32, 34, 38), -1)
+                cv2.putText(display, badge, (bx+10, by+bh-8), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6, (240, 240, 240), 2, cv2.LINE_AA)
+
+            # Location chip (bottom-left)
+            if prediction and isinstance(prediction, dict) and prediction.get("location"):
+                loc = str(prediction["location"])[:64]
+                size, _ = cv2.getTextSize(loc, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                lx, ly = 10, h - 18
+                cv2.rectangle(display, (lx-4, ly-size[1]-10), (lx+size[0]+8, ly+6), (30, 35, 40), -1)
+                cv2.putText(display, loc, (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (100, 200, 255), 1, cv2.LINE_AA)
+
+            # Instruction pill (bottom-right)
+            instr = "Tekan 'q' untuk keluar"
+            size, _ = cv2.getTextSize(instr, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            px, py = w - size[0] - 20, h - 18
+            cv2.rectangle(display, (px-10, py-size[1]-10), (px+size[0]+10, py+6), (30, 30, 34), -1)
+            cv2.putText(display, instr, (px, py), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (245, 245, 245), 1, cv2.LINE_AA)
+
+            cv2.imshow(self.window_name, display)
+            cv2.waitKey(1)
+        except Exception:
+            # Jangan ganggu alur utama jika preview gagal
+            pass
+
     def cleanup(self):
         """Cleanup resources."""
         print("[HardwareInterface] Cleaning up resources...")
@@ -364,7 +440,14 @@ class HardwareInterface:
         # Cleanup GPIO
         if GPIO is not None:
             GPIO.cleanup()
-        
+
+        # Close preview windows (if any)
+        try:
+            import cv2
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
+
         print("[HardwareInterface] Cleanup complete")
 
 
