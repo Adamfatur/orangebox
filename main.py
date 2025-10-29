@@ -92,6 +92,25 @@ def main():
         args.model = os.path.join(script_dir, args.model)
     if not os.path.isabs(args.labels):
         args.labels = os.path.join(script_dir, args.labels)
+
+    # Helper: auto-select model if missing
+    def _auto_select_model(base_dir: str) -> str:
+        models_dir = os.path.join(base_dir, 'models')
+        preferred = [
+            'model_quant_infer.tflite',
+            'model_quant.tflite',
+            'model_float32_infer.tflite',
+            'model.tflite'
+        ]
+        for name in preferred:
+            candidate = os.path.join(models_dir, name)
+            if os.path.exists(candidate):
+                return candidate
+        if os.path.exists(models_dir):
+            for f in os.listdir(models_dir):
+                if f.endswith('.tflite'):
+                    return os.path.join(models_dir, f)
+        return None
     
     # Print banner
     print_banner()
@@ -149,23 +168,91 @@ def main():
             
             classifier = MockClassifier()
         else:
-            # Real classifier
+            # Real classifier dengan auto-fallback
+            auto_selected = False
             if not os.path.exists(args.model):
-                print(f"\n❌ ERROR: Model file tidak ditemukan: {args.model}")
-                print("\n� Opsi:")
-                print("1. Gunakan model yang ada:")
-                models_dir = os.path.join(script_dir, 'models')
-                if os.path.exists(models_dir):
-                    tflite_files = [f for f in os.listdir(models_dir) if f.endswith('.tflite')]
-                    if tflite_files:
-                        for tf in tflite_files:
-                            print(f"   python3 main.py --model models/{tf}")
-                print("2. Train model baru: python3 train_model.py")
-                print("3. Test tanpa model: python3 main.py --test")
-                return 1
+                selected = _auto_select_model(script_dir)
+                if selected:
+                    rel = os.path.relpath(selected, script_dir)
+                    print(f"      ℹ️  Model tidak ditemukan di path yang diberikan.")
+                    print(f"      🔎 Auto-selected model: {rel}")
+                    args.model = selected
+                    auto_selected = True
+                else:
+                    print("      ⚠️  Tidak ada file model ditemukan. Beralih ke TEST mode (Mock).")
+                    args.test = True
             
-            classifier = WasteClassifier(model_path=args.model, labels_path=args.labels)
-            print("      ✓ Waste Classifier initialized")
+            if args.test:
+                # Mock classifier untuk testing otomatis jika model/interpreter tidak tersedia
+                class MockClassifier:
+                    def __init__(self):
+                        self.labels = ['ORGANIC', 'ANORGANIC']
+                        print("      ✓ Mock Classifier initialized (auto-fallback)")
+                    
+                    def predict_with_all_scores(self, image):
+                        import random
+                        import time
+                        time.sleep(0.1)
+                        is_organic = random.choice([True, False])
+                        confidence = random.uniform(0.65, 0.98)
+                        if is_organic:
+                            return {
+                                'label': 'ORGANIC',
+                                'confidence': confidence,
+                                'all_scores': {
+                                    'ORGANIC': confidence,
+                                    'ANORGANIC': 1.0 - confidence
+                                }
+                            }
+                        else:
+                            return {
+                                'label': 'ANORGANIC',
+                                'confidence': confidence,
+                                'all_scores': {
+                                    'ORGANIC': 1.0 - confidence,
+                                    'ANORGANIC': confidence
+                                }
+                            }
+                classifier = MockClassifier()
+            else:
+                try:
+                    classifier = WasteClassifier(model_path=args.model, labels_path=args.labels)
+                    print("      ✓ Waste Classifier initialized")
+                except ModuleNotFoundError as e:
+                    print(f"      ⚠️  Interpreter tidak tersedia: {e}")
+                    print("      → Auto-switch ke TEST mode (Mock Classifier)")
+                    # Fallback ke mock tanpa menghentikan program
+                    class MockClassifier:
+                        def __init__(self):
+                            self.labels = ['ORGANIC', 'ANORGANIC']
+                            print("      ✓ Mock Classifier initialized (auto-fallback)")
+                        
+                        def predict_with_all_scores(self, image):
+                            import random
+                            import time
+                            time.sleep(0.1)
+                            is_organic = random.choice([True, False])
+                            confidence = random.uniform(0.65, 0.98)
+                            if is_organic:
+                                return {
+                                    'label': 'ORGANIC',
+                                    'confidence': confidence,
+                                    'all_scores': {
+                                        'ORGANIC': confidence,
+                                        'ANORGANIC': 1.0 - confidence
+                                    }
+                                }
+                            else:
+                                return {
+                                    'label': 'ANORGANIC',
+                                    'confidence': confidence,
+                                    'all_scores': {
+                                        'ORGANIC': 1.0 - confidence,
+                                        'ANORGANIC': confidence
+                                    }
+                                }
+                    classifier = MockClassifier()
+                    args.test = True
         
         print()
         
