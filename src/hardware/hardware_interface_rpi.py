@@ -91,6 +91,9 @@ class HardwareInterface:
         self.trigger_cooldown = 1.0
         # Preview window name (for OpenCV display)
         self.window_name = "Orange Box - Camera View"
+        # Camera logging control (avoid spam)
+        self._last_frame_log_time = 0
+        self._frame_log_interval = 5.0  # seconds
         
         # Auto-detect camera if not specified
         if camera_index is None:
@@ -271,7 +274,14 @@ class HardwareInterface:
                     print("[ERROR] Failed to capture frame")
                     return None
             
-            print(f"[HardwareInterface] 📸 Frame captured ({frame.shape[1]}x{frame.shape[0]})")
+            # Rate-limit camera capture logs to avoid spam
+            try:
+                now = time.time()
+                if (now - self._last_frame_log_time) >= self._frame_log_interval:
+                    print(f"[HardwareInterface] 📸 Frame captured ({frame.shape[1]}x{frame.shape[0]})")
+                    self._last_frame_log_time = now
+            except Exception:
+                pass
             return frame
         
         except Exception as e:
