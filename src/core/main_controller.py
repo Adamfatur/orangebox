@@ -916,7 +916,14 @@ class MainController:
         if self.location_service:
             self.location_service.stop_background_update()
         
-        # Cleanup hardware
+        # Cleanup servo controller first to stop PWM before any GPIO cleanup
+        try:
+            if hasattr(self, 'servo3') and self.servo3:
+                self.servo3.cleanup()
+        except Exception:
+            pass
+
+        # Then cleanup main hardware interface (may call GPIO.cleanup)
         self.hw.cleanup()
 
 

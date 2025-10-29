@@ -9,6 +9,7 @@ All rights reserved.
 import time
 import threading
 import subprocess
+import json
 from datetime import datetime
 from typing import Optional, Tuple, Dict
 
@@ -34,6 +35,11 @@ class LocationService:
         self.is_running = False
         self.update_thread = None
         self.lock = threading.Lock()
+        # Rate-limit fetch attempts & warnings to avoid spam
+        self.last_fetch_attempt_time = 0
+        self.fetch_retry_interval = 60  # seconds between fetch attempts when unavailable
+        self._gpsd_last_warn_time = 0
+        self._gpsd_warn_interval = 60  # seconds between GPSD not running warnings
         
         # Default mock location (Jakarta)
         if mock_location is None:
@@ -64,13 +70,15 @@ class LocationService:
             atau None jika gagal
         """
         with self.lock:
+            # Jika belum ada lokasi, batasi frekuensi fetch agar tidak spam
             if self.current_location is None:
-                # Coba fetch lokasi sekali
-                location = self._fetch_location()
-                if location:
-                    self.current_location = location
-                    self.last_update_time = time.time()
-            
+                now = time.time()
+                if now - self.last_fetch_attempt_time >= self.fetch_retry_interval:
+                    self.last_fetch_attempt_time = now
+                    location = self._fetch_location()
+                    if location:
+                        self.current_location = location
+                        self.last_update_time = time.time()
             return self.current_location
     
     def _fetch_location(self) -> Optional[Dict]:
@@ -118,7 +126,11 @@ class LocationService:
             )
             
             if result.returncode != 0:
-                print("[LocationService] GPSD service not running. Start with: sudo systemctl start gpsd")
+                # Rate-limit warning to avoid log spam
+                now = time.time()
+                if now - self._gpsd_last_warn_time >= self._gpsd_warn_interval:
+                    print("[LocationService] GPSD service not running. Start with: sudo systemctl start gpsd")
+                    self._gpsd_last_warn_time = now
                 return None
             
             # Get GPS data via gpspipe (read 5 lines untuk dapat TPV message)
@@ -164,11 +176,19 @@ class LocationService:
                 except json.JSONDecodeError:
                     pass
             
-            print("[LocationService] No valid GPS fix from GPSD")
+            # Optional informational message when gpsd is running but no fix
+            now = time.time()
+            if now - self._gpsd_last_warn_time >= self._gpsd_warn_interval:
+                print("[LocationService] No valid GPS fix from GPSD")
+                self._gpsd_last_warn_time = now
             return None
             
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            print(f"[LocationService] GPSD error: {e}")
+            # Rate-limited error printing
+            now = time.time()
+            if now - self._gpsd_last_warn_time >= self._gpsd_warn_interval:
+                print(f"[LocationService] GPSD error: {e}")
+                self._gpsd_last_warn_time = now
             return None
     
     def _fetch_via_serial(self) -> Optional[Dict]:
@@ -324,8 +344,10 @@ class LocationService:
         Returns:
             String format: "📍 -6.2088°, 106.8456° (Accuracy: 10m)"
         """
-        location = self.get_location()
-        
+        # Jangan memicu fetch sinkron untuk keperluan display.
+        # Gunakan lokasi cached dari background update saja.
+        with self.lock:
+            location = self.current_location
         if location is None:
             return "📍 Location: Unavailable"
         
