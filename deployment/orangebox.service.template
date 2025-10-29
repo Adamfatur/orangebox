@@ -1,0 +1,45 @@
+# Orange Box Systemd Service Template
+# File ini akan dibuat otomatis oleh deploy.sh
+# Location: /etc/systemd/system/orangebox.service
+
+[Unit]
+Description=Orange Box - Intelligent Waste Classification System
+Documentation=https://github.com/yourrepo/orangebox
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/orangebox
+
+# Environment variables
+Environment="DISPLAY=:0"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/home/pi/orangebox"
+
+# Main command (camera auto-detection enabled)
+ExecStart=/usr/bin/python3 /home/pi/orangebox/main.py --model /home/pi/orangebox/models/model_quant_infer.tflite
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=5min
+StartLimitBurst=5
+
+# Resource limits (optional)
+# MemoryLimit=512M
+# CPUQuota=70%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orangebox
+
+# Security (optional hardening)
+# NoNewPrivileges=true
+# PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
