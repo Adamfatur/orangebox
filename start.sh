@@ -9,17 +9,21 @@ echo ""
 pkill -f "python3 main.py" 2>/dev/null
 [ $? -eq 0 ] && echo "⏹️  Stopped existing instance" && sleep 1
 
-# Start the system
 echo "🚀 Starting system..."
-python3 main.py --model models/model_quant_infer.tflite
-    exit 1
+
+# Prefer Python from virtual environment if available
+PYTHON_BIN="python3"
+if [ -x ".venv/bin/python3" ]; then
+  PYTHON_BIN=".venv/bin/python3"
 fi
+
+$PYTHON_BIN main.py --model models/model_quant_infer.tflite
 
 # Change to script directory
 cd "$(dirname "$0")"
 
 # Check if dependencies are installed
-if ! python3 -c "import cv2" 2>/dev/null; then
+if ! $PYTHON_BIN -c "import cv2" 2>/dev/null; then
     echo "📦 Dependencies not installed!"
     echo ""
     read -p "Install now? (y/n): " install_choice
@@ -49,7 +53,7 @@ if [ ! -f "models/model.tflite" ]; then
         1)
             echo ""
             echo "🎮 Running in TEST MODE..."
-            python3 run.py --test
+            $PYTHON_BIN run.py --test
             ;;
         2)
             echo ""
@@ -72,5 +76,5 @@ else
     echo ""
     echo "🚀 Starting Waste Sorter System..."
     echo ""
-    python3 run.py "$@"
+    $PYTHON_BIN run.py "$@"
 fi

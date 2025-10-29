@@ -54,9 +54,16 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     # Use OpenBLAS + LAPACK instead for NumPy/linear algebra support
     sudo apt install -y python3-pip python3-opencv libopenblas-dev liblapack-dev
     
-    # Install Python packages
-    echo "Installing Python packages..."
-    pip3 install --upgrade pip
+    # Create and use virtual environment to avoid PEP 668 (externally-managed)
+    echo "Setting up Python virtual environment (.venv)..."
+    # Ensure python3-venv is installed
+    sudo apt-get install -y python3-venv
+    # Create venv in project root
+    if [ ! -d ".venv" ]; then
+        python3 -m venv .venv
+    fi
+    # Upgrade pip inside venv
+    .venv/bin/pip install --upgrade pip
     
     echo "Installing system packages for Raspberry Pi..."
     sudo apt-get update
@@ -69,16 +76,16 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     # GPS support (gpsd) clients
     sudo apt-get install -y gpsd gpsd-clients
 
-    echo "Installing Python packages for Raspberry Pi..."
-    # Core Python libs
-    pip3 install numpy RPi.GPIO gpiozero pymysql pynmea2
+    echo "Installing Python packages for Raspberry Pi (in venv)..."
+    # Core Python libs in venv
+    .venv/bin/pip install numpy RPi.GPIO gpiozero pymysql pynmea2
     # TFLite runtime (prefer runtime; fallback to TensorFlow if wheel unavailable)
-    if ! pip3 install tflite-runtime 2>/dev/null; then
+    if ! .venv/bin/pip install tflite-runtime 2>/dev/null; then
         echo "⚠️  TFLite runtime not available for this arch, installing TensorFlow (may be heavy)..."
-        pip3 install tensorflow
+        .venv/bin/pip install tensorflow
     fi
     # Adafruit PCA9685 + motor (optional; for I2C servo driver boards)
-    pip3 install adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-motor
+    .venv/bin/pip install adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-motor
 
     # Enable camera and GPIO/I2C/SPI
     echo "Enabling camera and GPIO/I2C/SPI..."
@@ -86,6 +93,11 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     sudo raspi-config nonint do_camera 0 || true
     sudo raspi-config nonint do_spi 0 || true
     sudo raspi-config nonint do_i2c 0 || true
+
+    echo ""
+    echo "✅ Python virtual environment ready"
+    echo "To activate: source .venv/bin/activate"
+    echo "To run app: .venv/bin/python3 main.py (or ./start.sh)"
     
 elif [[ "$PLATFORM" == "mac" ]]; then
     # macOS - lighter installation

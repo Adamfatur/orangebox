@@ -289,9 +289,10 @@ Ready to begin?"""
                 ("Installing system packages",
                  "sudo apt-get install -y python3-pip python3-opencv python3-numpy python3-picamera2 "
                  "python3-rpi.gpio libopenblas-dev liblapack-dev libraspberrypi-dev "
-                 "libcamera-dev libcamera-apps libmysqlclient-dev v4l-utils git dialog whiptail", 30),
-                ("Upgrading pip", "pip3 install --upgrade pip", 50),
-                ("Installing Python packages", f"pip3 install -r {self.project_dir}/requirements.txt", 70),
+                 "libcamera-dev libcamera-apps libmysqlclient-dev v4l-utils git dialog whiptail python3-venv", 30),
+                ("Creating Python venv", f"cd {self.project_dir} && python3 -m venv .venv", 40),
+                ("Upgrading pip (venv)", f"{self.project_dir}/.venv/bin/pip install --upgrade pip", 50),
+                ("Installing Python packages (venv)", f"{self.project_dir}/.venv/bin/pip install -r {self.project_dir}/requirements.txt", 70),
             ]
             if self.config['has_gps']:
                 steps.append(("Installing GPS packages", "sudo apt-get install -y gpsd gpsd-clients python3-gps", 85))

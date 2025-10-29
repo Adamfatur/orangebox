@@ -86,8 +86,13 @@ echo "🐍 STEP 2: Installing Python Dependencies"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 cd "$PROJECT_DIR"
-pip3 install --upgrade pip
-pip3 install -r requirements.txt
+# Create venv to comply with PEP 668 on Raspberry Pi OS
+sudo apt-get install -y python3-venv
+if [ ! -d ".venv" ]; then
+    python3 -m venv .venv
+fi
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
 
 echo "✅ Python dependencies installed"
 echo ""
