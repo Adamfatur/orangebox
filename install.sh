@@ -75,6 +75,8 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     sudo apt-get install -y v4l-utils
     # GPS support (gpsd) clients
     sudo apt-get install -y gpsd gpsd-clients
+    # I2C and SMBus tools for PCA9685/Adafruit Blinka
+    sudo apt-get install -y i2c-tools python3-smbus
 
     echo "Installing Python packages for Raspberry Pi (in venv)..."
     # Core Python libs in venv
@@ -98,6 +100,7 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     echo "✅ Python virtual environment ready"
     echo "To activate: source .venv/bin/activate"
     echo "To run app: .venv/bin/python3 main.py (or ./start.sh)"
+    echo "To run servo test: .venv/bin/python3 scripts/test_servo_simple.py"
     
 elif [[ "$PLATFORM" == "mac" ]]; then
     # macOS - lighter installation

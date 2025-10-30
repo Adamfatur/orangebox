@@ -20,3 +20,8 @@ pynmea2>=1.18.0
 
 # Optional: untuk development dan debugging
 # pillow>=8.0.0
+
+# Hardware: PCA9685 servo support (Raspberry Pi)
+adafruit-blinka>=8.0.0
+adafruit-circuitpython-pca9685>=3.4.11
+adafruit-circuitpython-motor>=3.4.11
