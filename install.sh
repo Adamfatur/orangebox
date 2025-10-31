@@ -58,9 +58,9 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     echo "Setting up Python virtual environment (.venv)..."
     # Ensure python3-venv is installed
     sudo apt-get install -y python3-venv
-    # Create venv in project root
+    # Create venv in project root (include system site-packages so apt libs visible)
     if [ ! -d ".venv" ]; then
-        python3 -m venv .venv
+        python3 -m venv .venv --system-site-packages
     fi
     # Upgrade pip inside venv
     .venv/bin/pip install --upgrade pip
@@ -71,6 +71,8 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     sudo apt-get install -y python3-opencv
     # Libcamera + Picamera2 support (Bookworm)
     sudo apt-get install -y python3-picamera2 libcamera-apps
+    # TensorFlow Lite Runtime via apt (lighter, has wheels for Pi)
+    sudo apt-get install -y python3-tflite-runtime || true
     # Camera tooling
     sudo apt-get install -y v4l-utils
     # GPS support (gpsd) clients
@@ -81,10 +83,14 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     echo "Installing Python packages for Raspberry Pi (in venv)..."
     # Upgrade build tools in venv
     .venv/bin/pip install --upgrade pip setuptools wheel
-    # Install all project requirements into venv to ensure cv2, servo, GPS, DB, etc. tersedia
-    if ! .venv/bin/pip install -r requirements.txt; then
+    # Install project requirements into venv
+    # On Raspberry Pi, filter out packages provided by apt (opencv-python, tflite-runtime)
+    TMP_REQ=.requirements.rpi.txt
+    grep -Ev '^(opencv-python|tflite-runtime)' requirements.txt > "$TMP_REQ"
+    if ! .venv/bin/pip install -r "$TMP_REQ"; then
         echo "⚠️  Some requirements failed; continuing with fallbacks where possible"
     fi
+    rm -f "$TMP_REQ"
     # Prefer TFLite runtime; fallback ke TensorFlow jika modul tidak tersedia
     if ! .venv/bin/python3 -c "import tflite_runtime" 2>/dev/null; then
         echo "⚠️  tflite-runtime tidak tersedia, memasang TensorFlow (mungkin berat)..."
