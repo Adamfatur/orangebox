@@ -234,7 +234,7 @@ User=$USER
 WorkingDirectory=$PROJECT_DIR
 Environment="DISPLAY=:0"
 Environment="PYTHONUNBUFFERED=1"
-ExecStart=/usr/bin/python3 $PROJECT_DIR/main.py --model $PROJECT_DIR/models/model_quant_infer.tflite --camera 0
+ExecStart=$PROJECT_DIR/.venv/bin/python3 $PROJECT_DIR/main.py --model $PROJECT_DIR/models/model_quant_infer.tflite --camera 0
 Restart=always
 RestartSec=10
 StandardOutput=journal

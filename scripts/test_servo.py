@@ -66,9 +66,9 @@ def main():
         import config
         # Import opsional untuk fallback GPIO
         try:
-            from src.hardware.three_servo_hardware import ThreeServoHardware
+            from src.hardware.gpio_servo_hardware import GpioServoHardware
         except Exception:
-            ThreeServoHardware = None
+            GpioServoHardware = None
     except Exception as e:
         print(f"[ERROR] Failed to import hardware modules: {e}")
         return
@@ -151,21 +151,21 @@ def main():
                 print("=" * 60)
             except Exception as e:
                 print(f"[ERROR] PCA9685 init/move failed: {e}")
-                print("[INFO] Fallback to ThreeServoHardware (GPIO/simulasi)")
+                print("[INFO] Fallback to GPIO Servo Hardware (PWM/simulasi)")
                 # Force fallback path below
                 HAS_PCA9685_local = False
                 # Proceed to fallback block
-                if ThreeServoHardware is None:
-                    print("[WARN] ThreeServoHardware not available; running in pure simulation.")
+                if GpioServoHardware is None:
+                    print("[WARN] GPIO Servo Hardware not available; running in pure simulation.")
                     print("Simulated: Neutral → Bin A → Neutral → Bin B → Neutral")
                     time.sleep(3)
                 else:
-                    hw = ThreeServoHardware()
+                    hw = GpioServoHardware()
                     status = hw.get_status()
                     print("\nSystem Status:")
                     print(f"  Active: {status['active']}")
                     print(f"  GPIO: {status['has_gpio']}")
-                    print(f"  Servos: {status['count']}/3")
+                    print(f"  Servos: {status['count']}")
                     for sid, info in status['servos'].items():
                         print(f"  - {info['name']}: GPIO {info['pin']}")
                     try:
@@ -204,20 +204,20 @@ def main():
                     print("=" * 60)
 
         else:
-            # Fallback: use ThreeServoHardware (GPIO PWM) or simulation
-            if ThreeServoHardware is None:
-                print("[WARN] ThreeServoHardware not available; running in pure simulation.")
+            # Fallback: use GPIO Servo Hardware (PWM) or simulation
+            if GpioServoHardware is None:
+                print("[WARN] GPIO Servo Hardware not available; running in pure simulation.")
                 print("Simulated: Neutral → Bin A → Neutral → Bin B → Neutral")
                 time.sleep(3)
             else:
-                hw = ThreeServoHardware()
+                hw = GpioServoHardware()
 
                 # Show basic status
                 status = hw.get_status()
                 print("\nSystem Status:")
                 print(f"  Active: {status['active']}")
                 print(f"  GPIO: {status['has_gpio']}")
-                print(f"  Servos: {status['count']}/3")
+                print(f"  Servos: {status['count']}")
                 for sid, info in status['servos'].items():
                     print(f"  - {info['name']}: GPIO {info['pin']}")
 

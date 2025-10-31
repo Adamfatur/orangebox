@@ -39,9 +39,9 @@ declare -a commands
 
 if [ "$has_flask" = true ]; then
     option_count=$((option_count + 1))
-    options[$option_count]="Web Installer (Modern UI)"
-    commands[$option_count]="web"
-    echo "  $option_count. 🌐 Web Installer (Modern UI) - Recommended"
+    options[$option_count]="GUI Installer (Dialog/Whiptail)"
+    commands[$option_count]="gui"
+    echo "  $option_count. 🌐 GUI Installer (Dialog/Whiptail) - Recommended"
 fi
 
 if [ "$has_dialog" = true ]; then
@@ -76,24 +76,9 @@ fi
 selected_command="${commands[$choice]}"
 
 case "$selected_command" in
-    "web")
+    "gui")
         echo ""
-        echo "🌐 Starting Web Installer..."
-        echo "   Installing Flask if needed..."
-        
-        # Install Flask if not available
-        if [ "$has_flask" = false ]; then
-            pip3 install flask --user
-        fi
-        
-        echo "   Web installer will open at: http://localhost:5000"
-        echo "   Press Ctrl+C to stop the web server"
-        echo ""
-        python3 tools/web-installer.py
-        ;;
-    "tui")
-        echo ""
-        echo "🎨 Starting TUI Installer..."
+        echo "🌐 Starting GUI Installer (Dialog/Whiptail)..."
         echo ""
         python3 tools/gui-installer.py
         ;;

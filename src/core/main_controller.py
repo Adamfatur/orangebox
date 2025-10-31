@@ -12,7 +12,11 @@ from enum import Enum
 from typing import Optional
 import numpy as np
 import config
-from hardware.three_servo_hardware import ThreeServoHardware
+from hardware.gpio_servo_hardware import GpioServoHardware
+try:
+    from hardware.five_servo_hardware import FiveServoHardware
+except Exception:
+    FiveServoHardware = None
 
 
 class State(Enum):
@@ -40,8 +44,15 @@ class MainController:
         """
         self.classifier = classifier
         self.hw = hardware_interface
-        # Integrasi controller 3-servo untuk urutan sorting lengkap
-        self.servo3 = ThreeServoHardware()
+        # Integrasi controller servo untuk urutan sorting lengkap
+        # Pilih 5-servo (ServoKit/PCA9685) jika dikonfigurasi, fallback ke 3-servo (GPIO)
+        driver = getattr(config, 'SERVO_DRIVER', 'gpio').lower()
+        if driver == 'servokit' and FiveServoHardware is not None:
+            print("[MainController] Using 5-Servo hardware (ServoKit/PCA9685)")
+            self.servo_hw = FiveServoHardware()
+        else:
+            print("[MainController] Using GPIO Servo hardware (PWM)")
+            self.servo_hw = GpioServoHardware()
         self.current_state = State.IDLE
         self.running = False
         
@@ -222,7 +233,7 @@ class MainController:
             except Exception:
                 pass
             try:
-                self.servo3.reset_to_ready()
+                self.servo_hw.reset_to_ready()
             except Exception:
                 pass
             print("[IDLE] Standby - Menunggu objek masuk...")
@@ -741,8 +752,8 @@ class MainController:
         if self.current_state != State.SORTING_A:
             self._print_state_transition(State.SORTING_A)
         
-        # Urutan lengkap menggunakan 3-servo controller
-        self.servo3.execute_sort('BIN A', getattr(config, 'SERVO_LAYER2_BIN_A', 60))
+        # Urutan lengkap menggunakan controller servo yang aktif
+        self.servo_hw.execute_sort('BIN A', getattr(config, 'SERVO_LAYER2_BIN_A', 60))
         
         print(f"[SORTING_A] Waiting for waste to fall ({self.sorting_duration}s)...")
         
@@ -786,8 +797,8 @@ class MainController:
         if self.current_state != State.SORTING_B:
             self._print_state_transition(State.SORTING_B)
         
-        # Urutan lengkap menggunakan 3-servo controller
-        self.servo3.execute_sort('BIN B', getattr(config, 'SERVO_LAYER2_BIN_B', 120))
+        # Urutan lengkap menggunakan controller servo yang aktif
+        self.servo_hw.execute_sort('BIN B', getattr(config, 'SERVO_LAYER2_BIN_B', 120))
 
         print(f"[SORTING_B] Waiting for waste to fall ({self.sorting_duration}s)...")
 
@@ -863,6 +874,18 @@ class MainController:
                 if key == ord('q'):
                     print("\n[MainController] Quit command received")
                     self.running = False
+
+                # Detect window closed via X button (macOS/Raspberry Pi)
+                # If preview window is closed, gracefully stop the loop
+                try:
+                    if hasattr(self.hw, 'window_name'):
+                        prop = cv2.getWindowProperty(self.hw.window_name, cv2.WND_PROP_VISIBLE)
+                        if prop < 1:  # Window hidden/closed or not found
+                            print("\n[MainController] Preview window closed. Exiting...")
+                            self.running = False
+                except Exception:
+                    # If property read fails, ignore and continue
+                    pass
                 
                 # Small delay untuk mencegah CPU overload
                 time.sleep(0.01)
@@ -918,8 +941,8 @@ class MainController:
         
         # Cleanup servo controller first to stop PWM before any GPIO cleanup
         try:
-            if hasattr(self, 'servo3') and self.servo3:
-                self.servo3.cleanup()
+            if hasattr(self, 'servo_hw') and self.servo_hw:
+                self.servo_hw.cleanup()
         except Exception:
             pass
 

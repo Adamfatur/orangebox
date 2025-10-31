@@ -24,6 +24,14 @@ PLATFORM = 'mac'  # ← Ganti ke 'rpi' saat deploy ke Raspberry Pi
 CAMERA_INDEX = 0  # 0 = internal, 1 = external webcam ← External webcam active
 
 # ============================================
+# UI SETTINGS
+# ============================================
+
+# Tampilan kamera bergaya (rounded cards, chips, logo) seperti di macOS mock
+# Aktifkan di Raspberry Pi jika ingin UI selaras; nonaktifkan jika butuh performa maksimal
+FANCY_UI = True  # Default: True; di RPi tetap bekerja, gunakan resolusi wajar
+
+# ============================================
 # MODEL CONFIGURATION
 # ============================================
 
@@ -146,6 +154,18 @@ PROXIMITY_SENSOR_PIN = 17
 # SERVO CONFIGURATION (3 Servos MG996R)
 # ============================================
 
+# DEVELOPER MAP (Servo):
+# - Edit angles & GPIO pins below; all code reads from config.py.
+# - GPIO flow: `src/hardware/gpio_servo_hardware.py`
+#   * Movement entrypoint: `execute_sort(bin_assignment, bin_angle)`
+#   * Doors: `open_doors()`, `close_doors()`
+#   * Selector: `set_selector(angle)`, `reset_to_ready()`
+# - ServoKit/PCA9685 flow (5 servos): `src/hardware/five_servo_hardware.py`
+#   * Movement entrypoint: `execute_sort(bin_assignment, bin_angle)`
+#   * Doors: `open_doors()`, `close_doors()`
+#   * Selector: `set_selector(angle)`, `reset_to_ready()`
+# - Timing knobs: see `SERVO_*` variables below; used directly by both hardware classes.
+
 # PETUNJUK CEPAT (SERVO)
 # - Kamu cukup ubah derajat/pin di sini. File lain membaca nilai dari config.py.
 # - Layer 1 (pintu wadah atas):
@@ -153,7 +173,7 @@ PROXIMITY_SENSOR_PIN = 17
 #   * Kanan: `SERVO_LAYER1_RIGHT_PIN`, `SERVO_LAYER1_RIGHT_CLOSED`, `SERVO_LAYER1_RIGHT_OPEN`
 # - Layer 2 (selector ke Bin A/B): atur `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL`.
 # - Arah terbalik? Tukar nilai BIN_A dan BIN_B, atau geser ± beberapa derajat.
-# - Uji aman gerakan: `python3 src/hardware/three_servo_hardware.py` (simulasi di Mac, real di RPi).
+# - Uji aman gerakan: `python3 src/hardware/gpio_servo_hardware.py` (simulasi di Mac, real di RPi).
 # - Pakai driver PCA9685? Lihat `src/hardware/hardware_interface_rpi.py` dan variabel `SERVO_CHANNEL` (legacy).
 # - Tips: mulai dari NEUTRAL=90°, buka pintu ±90°; sesuaikan kecil dulu (±5°).
 
@@ -172,6 +192,18 @@ SERVO_LAYER1_LEFT_OPEN = 90     # Angle when door opens (vertical down)
 SERVO_LAYER1_RIGHT_PIN = 13     # GPIO PWM pin (BCM numbering)
 SERVO_LAYER1_RIGHT_CLOSED = 0   # Angle when door is closed (horizontal)
 SERVO_LAYER1_RIGHT_OPEN = 90    # Angle when door opens (vertical down)
+
+# Optional: Layer 1 uses dual servos per side (total 4 servos)
+# If pins are set (not None), these paired servos will mirror the primary doors
+# Left side second servo
+SERVO_LAYER1_LEFT2_PIN = None           # e.g., 19 (BCM) or None to disable
+SERVO_LAYER1_LEFT2_CLOSED = SERVO_LAYER1_LEFT_CLOSED
+SERVO_LAYER1_LEFT2_OPEN = SERVO_LAYER1_LEFT_OPEN
+
+# Right side second servo
+SERVO_LAYER1_RIGHT2_PIN = None          # e.g., 26 (BCM) or None to disable
+SERVO_LAYER1_RIGHT2_CLOSED = SERVO_LAYER1_RIGHT_CLOSED
+SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 
 # Servo 3: Layer 2 - Pemilah Arah (Direction Selector)
 # Directs waste to Bin A (Organic) or Bin B (Anorganic)
@@ -201,6 +233,26 @@ SERVO_CHANNEL = 0               # PCA9685 channel (if using PCA9685)
 SERVO_ANGLE_BIN_A = 0           # Bin A (Organic) - deprecated, use SERVO_LAYER2_BIN_A
 SERVO_ANGLE_BIN_B = 90          # Bin B (Anorganic) - deprecated, use SERVO_LAYER2_BIN_B
 SERVO_ANGLE_NEUTRAL = 45        # Neutral position - deprecated, use SERVO_LAYER2_NEUTRAL
+
+# =====================
+# PCA9685/ServoKit (5-Servo) Configuration
+# =====================
+# Enable ServoKit driver (PCA9685) for real servo movement aligned with all-code-main
+SERVO_DRIVER = 'servokit'   # Options: 'servokit' (PCA9685) or 'gpio' (RPi.GPIO)
+
+# PCA9685 I2C configuration
+PCA9685_I2C_ADDRESS = 0x40   # Default PCA9685 address
+PCA9685_FREQUENCY = 50       # Frequency in Hz (standard for MG996R)
+
+# PCA9685 channel mapping for 5-servo system
+# Layer 1 doors (two servos per side: A and B)
+SERVO_L1_LEFT_A_CH = 2       # Example: 2 (adjust to your wiring)
+SERVO_L1_LEFT_B_CH = None    # Optional second servo on left side
+SERVO_L1_RIGHT_A_CH = 3      # Example: 3 (adjust to your wiring)
+SERVO_L1_RIGHT_B_CH = None   # Optional second servo on right side
+
+# Layer 2 selector
+SERVO_L2_SELECTOR_CH = 0     # Example: 0 (adjust to your wiring)
 
 # ============================================
 # TIMING SETTINGS

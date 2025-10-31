@@ -1,12 +1,11 @@
 """
-3-Servo Hardware Interface for Raspberry Pi 5
-Manages Layer 1 (2 servos: container doors) + Layer 2 (1 servo: direction selector)
+GPIO Servo Hardware Interface for Raspberry Pi
+Manages Layer 1 doors (left/right + optional pairs) and Layer 2 selector.
 
 System Design:
-- Layer 1: User places waste → Camera analyzes
-- Layer 2: Selector tilts FIRST to target bin (±30° from neutral)
-- Layer 1: Doors open to drop waste → Waste slides to Bin A/B
-- Reset: Doors close and selector returns to neutral (90°)
+- Layer 2: Selector tilts FIRST to target bin (±30° dari netral)
+- Layer 1: Pintu buka untuk menjatuhkan sampah → Sampah meluncur ke Bin A/B
+- Reset: Pintu tutup dan selector kembali ke netral (~90°)
 
 Copyright (c) 2025 AF - OrangeBox Project
 All rights reserved.
@@ -19,7 +18,7 @@ All rights reserved.
 #   * Layer 1 Kanan → SERVO_LAYER1_RIGHT_CLOSED / SERVO_LAYER1_RIGHT_OPEN
 #   * Layer 2      → SERVO_LAYER2_BIN_A / SERVO_LAYER2_BIN_B / SERVO_LAYER2_NEUTRAL
 # - Uji gerakan aman (tanpa AI):
-#   `python3 src/hardware/three_servo_hardware.py`
+#   `python3 src/hardware/gpio_servo_hardware.py`
 #   Di Mac: simulasi (print). Di Raspberry Pi: servo fisik bergerak.
 # - Gerak terlalu kasar/bergetar? Kurangi langkah derajat atau aktifkan jeda lebih panjang
 #   via SERVO_MOVEMENT_TIME / SERVO_POSITION_HOLD_TIME di config.py.
@@ -36,16 +35,34 @@ try:
     HAS_GPIO = True
 except ImportError:
     HAS_GPIO = False
-    print("[3ServoHW] Warning: RPi.GPIO not available (non-RPi system)")
+    print("[GPIOServo] Warning: RPi.GPIO not available (non-Rpi system)")
 
 import config
 
 
-class ThreeServoHardware:
+class GpioServoHardware:
     """
-    Hardware manager for 3 MG996R servos:
-    - Layer 1: Left door + Right door
-    - Layer 2: Bin selector
+    Pengelola hardware untuk servo MG996R (GPIO PWM, 50 Hz):
+    - Layer 1: Pintu kiri + pintu kanan (opsional pasangan servo per sisi)
+    - Layer 2: Selector/bilah pengarah
+
+    Panduan Pengembang (Ringkas):
+    - Edit sudut dan pin GPIO di `config.py`:
+      * Layer 1 Kiri: `SERVO_LAYER1_LEFT_PIN`,
+        sudut: `SERVO_LAYER1_LEFT_CLOSED` / `SERVO_LAYER1_LEFT_OPEN`
+      * Layer 1 Kanan: `SERVO_LAYER1_RIGHT_PIN`,
+        sudut: `SERVO_LAYER1_RIGHT_CLOSED` / `SERVO_LAYER1_RIGHT_OPEN`
+      * Pasangan opsional: `SERVO_LAYER1_LEFT2_PIN`, `SERVO_LAYER1_RIGHT2_PIN`
+        sudut default meniru servo utama, bisa diubah via
+        `SERVO_LAYER1_LEFT2_CLOSED` / `SERVO_LAYER1_LEFT2_OPEN` dan
+        `SERVO_LAYER1_RIGHT2_CLOSED` / `SERVO_LAYER1_RIGHT2_OPEN`
+      * Layer 2 Selector: `SERVO_LAYER2_SELECTOR_PIN`,
+        sudut: `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL`
+    - Alur gerak (execute_sort): set selector → pintu buka → geser → pintu tutup → selector netral.
+    - Pengaturan waktu (lihat config.py): `SERVO_OPEN_DURATION`, `SERVO_DROP_DELAY`,
+      `SERVO_FALL_TIME`, `SERVO_SLIDE_TIME`, `SERVO_CLOSE_DELAY`, `SERVO_RESET_DELAY`,
+      serta tingkat rendah `SERVO_MOVEMENT_TIME`, `SERVO_POSITION_HOLD_TIME`, `SERVO_STOP_JITTER`.
+    - Arah terbalik? Tukar nilai BIN_A/B atau sesuaikan derajat ±.
     """
     
     def __init__(self):
@@ -53,7 +70,7 @@ class ThreeServoHardware:
         self.servos_active = False
         self.servos = {}
         
-        print("[3ServoHW] Initializing 3-servo system...")
+        print("[GPIOServo] Initializing GPIO servo system...")
         
         if self.has_gpio:
             self._init_gpio()
@@ -62,7 +79,7 @@ class ThreeServoHardware:
             else:
                 self._setup_servos_manual()
         else:
-            print("[3ServoHW] Running in simulation mode (no GPIO)")
+            print("[GPIOServo] Running in simulation mode (no GPIO)")
             # Still need servo configurations for simulation
             self._setup_servos_manual()
     
@@ -77,8 +94,8 @@ class ThreeServoHardware:
             self.has_gpio = False
     
     def _detect_and_setup_servos(self):
-        """Auto-detect and setup all 3 servos"""
-        print("[3ServoHW] Auto-detecting MG996R servos...")
+        """Auto-detect and setup servos"""
+        print("[GPIOServo] Auto-detecting MG996R servos...")
         
         configs = [
             {
@@ -112,12 +129,13 @@ class ThreeServoHardware:
             
             if self._test_servo_connection(cfg):
                 detected += 1
-                print(f"[3ServoHW] ✓ {cfg['name']} on GPIO {cfg['pin']}")
+                print(f"[GPIOServo] ✓ {cfg['name']} on GPIO {cfg['pin']}")
             else:
-                print(f"[3ServoHW] ✗ {cfg['name']} not detected on GPIO {cfg['pin']}")
+                print(f"[GPIOServo] ✗ {cfg['name']} not detected on GPIO {cfg['pin']}")
         
-        self.servos_active = (detected == 3)
-        print(f"[3ServoHW] Detected {detected}/3 servos" + (" ✓" if self.servos_active else " ⚠"))
+        # Active if at least Layer 2 and one Layer 1 door present
+        self.servos_active = (detected >= 2)
+        print(f"[GPIOServo] Detected {detected} servos" + (" ✓" if self.servos_active else " ⚠"))
     
     def _test_servo_connection(self, cfg):
         """Test if servo responds on GPIO pin"""
@@ -142,12 +160,19 @@ class ThreeServoHardware:
             return True
             
         except Exception as e:
-            print(f"[3ServoHW] Test failed on GPIO {cfg.get('pin')}: {e}")
+            print(f"[GPIOServo] Test failed on GPIO {cfg.get('pin')}: {e}")
             return False
     
     def _setup_servos_manual(self):
-        """Setup servos without detection test"""
-        print("[3ServoHW] Manual servo setup...")
+        """
+        Setup servo menggunakan pin dan sudut dari `config.py`.
+        Tempat edit:
+        - Pin/sudut Layer 1: `SERVO_LAYER1_*_PIN`, `SERVO_LAYER1_*_CLOSED`, `SERVO_LAYER1_*_OPEN`
+        - Pasangan opsional meniru utama atau bisa dioverride di config.
+        - Pin/sudut Layer 2 selector: `SERVO_LAYER2_SELECTOR_PIN`,
+          `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL`
+        """
+        print("[GPIOServo] Manual servo setup...")
         
         self.servos = {
             'layer1_left': {
@@ -173,6 +198,25 @@ class ThreeServoHardware:
                 'neutral': config.SERVO_LAYER2_NEUTRAL
             }
         }
+
+        # Optional paired servos for Layer 1 (total 4 servos on Layer 1)
+        # These will mirror movements of primary left/right doors when defined
+        if getattr(config, 'SERVO_LAYER1_LEFT2_PIN', None) is not None:
+            self.servos['layer1_left2'] = {
+                'id': 'layer1_left2',
+                'name': 'Layer 1 Left Door (Pair)',
+                'pin': config.SERVO_LAYER1_LEFT2_PIN,
+                'closed': getattr(config, 'SERVO_LAYER1_LEFT2_CLOSED', config.SERVO_LAYER1_LEFT_CLOSED),
+                'open': getattr(config, 'SERVO_LAYER1_LEFT2_OPEN', config.SERVO_LAYER1_LEFT_OPEN)
+            }
+        if getattr(config, 'SERVO_LAYER1_RIGHT2_PIN', None) is not None:
+            self.servos['layer1_right2'] = {
+                'id': 'layer1_right2',
+                'name': 'Layer 1 Right Door (Pair)',
+                'pin': config.SERVO_LAYER1_RIGHT2_PIN,
+                'closed': getattr(config, 'SERVO_LAYER1_RIGHT2_CLOSED', config.SERVO_LAYER1_RIGHT_CLOSED),
+                'open': getattr(config, 'SERVO_LAYER1_RIGHT2_OPEN', config.SERVO_LAYER1_RIGHT_OPEN)
+            }
         
         if self.has_gpio:
             for sid, cfg in self.servos.items():
@@ -191,23 +235,23 @@ class ThreeServoHardware:
     
     def _angle_to_duty(self, angle):
         """
-        Convert angle to PWM duty cycle for MG996R
-        0° = 2.5% duty (1ms pulse)
-        180° = 12.5% duty (2ms pulse)
+        Konversi sudut ke siklus tugas PWM untuk MG996R
+        0° = 2.5% duty (pulsa 1ms)
+        180° = 12.5% duty (pulsa 2ms)
         """
         return 2.5 + (angle / 18.0)
     
     def _move_servo(self, servo_id, angle):
         """
-        Move specific servo to angle with controlled speed and position verification.
+        Gerakkan servo tertentu ke sudut dengan kecepatan terkontrol dan verifikasi posisi.
         
-        CRITICAL: Ensures servo reaches exact position without drift or overshoot.
+        CATATAN PENTING: Memastikan servo mencapai posisi tepat tanpa drift atau overshoot.
         
-        Args:
+        Argumen:
             servo_id: ID servo ('layer1_left', 'layer1_right', 'layer2_selector')
-            angle: Target angle (0-180°)
+            angle: Sudut target (0-180°)
         
-        Returns:
+        Mengembalikan:
             bool: True jika sukses, False jika gagal
         """
         if servo_id not in self.servos:
@@ -225,7 +269,7 @@ class ThreeServoHardware:
             
             # If not using GPIO (simulation), just track position
             if not self.has_gpio:
-                print(f"[3ServoHW] {servo_id}: {old_angle}° → {angle}° ✓ (simulated)")
+                print(f"[GPIOServo] {servo_id}: {old_angle}° → {angle}° ✓ (simulated)")
                 return True
             
             # Real hardware mode
@@ -236,16 +280,19 @@ class ThreeServoHardware:
                 servo['pwm'].ChangeDutyCycle(duty)
                 
                 # Wait for servo to reach target position
+                # Movement speed is controlled by `SERVO_MOVEMENT_TIME` in config.py
                 movement_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
                 time.sleep(movement_time)
                 
                 # CRITICAL: Hold position briefly to ensure mechanical lock
                 # MG996R needs this to guarantee position accuracy
+                # Extra hold for mechanical lock: `SERVO_POSITION_HOLD_TIME` in config.py
                 hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
                 time.sleep(hold_time)  # Extra hold time
                 
                 # Stop PWM to prevent jitter/vibration and reduce power consumption
                 # MG996R will hold position mechanically even with PWM off
+                # Prevent jitter/vibration: `SERVO_STOP_JITTER` in config.py
                 stop_jitter = getattr(config, 'SERVO_STOP_JITTER', True)
                 if stop_jitter:
                     servo['pwm'].ChangeDutyCycle(0)
@@ -262,11 +309,11 @@ class ThreeServoHardware:
     
     def verify_positions(self):
         """
-        Verify all servos are at their expected positions.
-        CRITICAL: Prevents position drift during operation.
+        Verifikasi semua servo berada pada posisi yang diharapkan.
+        CATATAN PENTING: Mencegah drift posisi selama operasi.
         
-        Returns:
-            dict: Status of each servo position
+        Mengembalikan:
+            dict: Status posisi tiap servo
         """
         status = {}
         
@@ -282,13 +329,13 @@ class ThreeServoHardware:
     
     def reset_to_ready_position(self):
         """
-        Force all servos back to ready position.
-        CRITICAL: Ensures system starts from known good state.
+        Paksa semua servo kembali ke posisi siap.
+        CATATAN PENTING: Memastikan sistem memulai dari keadaan baik yang diketahui.
         
-        Returns:
-            bool: True if all servos reset successfully
+        Mengembalikan:
+            bool: True jika semua servo reset berhasil
         """
-        print("[3ServoHW] Resetting all servos to ready position...")
+        print("[GPIOServo] Resetting all servos to ready position...")
         
         success = True
         
@@ -297,125 +344,158 @@ class ThreeServoHardware:
             neutral = self.servos['layer2_selector'].get('neutral', config.SERVO_LAYER2_NEUTRAL)
             if not self._move_servo('layer2_selector', neutral):
                 success = False
-                print("[3ServoHW] ✗ Layer 2 reset failed")
+                print("[GPIOServo] ✗ Layer 2 reset failed")
         
         # Reset Layer 1 doors to closed
         if 'layer1_left' in self.servos:
             closed = self.servos['layer1_left'].get('closed', config.SERVO_LAYER1_LEFT_CLOSED)
             if not self._move_servo('layer1_left', closed):
                 success = False
-                print("[3ServoHW] ✗ Layer 1 Left reset failed")
+                print("[GPIOServo] ✗ Layer 1 Left reset failed")
+        if 'layer1_left2' in self.servos:
+            closed = self.servos['layer1_left2'].get('closed', getattr(config, 'SERVO_LAYER1_LEFT2_CLOSED', config.SERVO_LAYER1_LEFT_CLOSED))
+            if not self._move_servo('layer1_left2', closed):
+                success = False
+                print("[GPIOServo] ✗ Layer 1 Left (Pair) reset failed")
         
         if 'layer1_right' in self.servos:
             closed = self.servos['layer1_right'].get('closed', config.SERVO_LAYER1_RIGHT_CLOSED)
             if not self._move_servo('layer1_right', closed):
                 success = False
-                print("[3ServoHW] ✗ Layer 1 Right reset failed")
+                print("[GPIOServo] ✗ Layer 1 Right reset failed")
+        if 'layer1_right2' in self.servos:
+            closed = self.servos['layer1_right2'].get('closed', getattr(config, 'SERVO_LAYER1_RIGHT2_CLOSED', config.SERVO_LAYER1_RIGHT_CLOSED))
+            if not self._move_servo('layer1_right2', closed):
+                success = False
+                print("[GPIOServo] ✗ Layer 1 Right (Pair) reset failed")
         
         if success:
-            print("[3ServoHW] ✓ All servos at ready position")
+            print("[GPIOServo] ✓ All servos at ready position")
         
         return success
     
     def open_doors(self):
-        """Open both Layer 1 doors to drop waste"""
-        print("[3ServoHW] Opening container doors...")
+        """Buka kedua pintu Layer 1 untuk menjatuhkan sampah.
+        Sudut pintu dikonfigurasi di `config.py` → `SERVO_LAYER1_*_OPEN`.
+        Pintu tetap terbuka selama `SERVO_OPEN_DURATION` detik.
+        """
+        print("[GPIOServo] Opening container doors...")
         
         if not self.servos_active:
-            print("[3ServoHW] Simulating door open")
+            print("[GPIOServo] Simulating door open")
             time.sleep(config.SERVO_OPEN_DURATION)
             return True
         
         # Open both doors
         left_ok = self._move_servo('layer1_left', self.servos['layer1_left']['open'])
         right_ok = self._move_servo('layer1_right', self.servos['layer1_right']['open'])
+        # Move paired servos if configured
+        left2_ok = True
+        right2_ok = True
+        if 'layer1_left2' in self.servos:
+            left2_ok = self._move_servo('layer1_left2', self.servos['layer1_left2']['open'])
+        if 'layer1_right2' in self.servos:
+            right2_ok = self._move_servo('layer1_right2', self.servos['layer1_right2']['open'])
         
-        if left_ok and right_ok:
-            print("[3ServoHW] ✓ Doors opened")
+        if left_ok and right_ok and left2_ok and right2_ok:
+            print("[GPIOServo] ✓ Doors opened")
+            # How long doors stay open: `SERVO_OPEN_DURATION` in config.py
             time.sleep(config.SERVO_OPEN_DURATION)
             return True
         else:
-            print(f"[3ServoHW] ⚠ Door open issue (L:{left_ok} R:{right_ok})")
+            print(f"[GPIOServo] ⚠ Door open issue (L:{left_ok} R:{right_ok} L2:{left2_ok} R2:{right2_ok})")
             return False
     
     def close_doors(self):
-        """Close both Layer 1 doors"""
-        print("[3ServoHW] Closing container doors...")
+        """Tutup kedua pintu Layer 1.
+        Sudut tutup dikonfigurasi di `config.py` → `SERVO_LAYER1_*_CLOSED`.
+        """
+        print("[GPIOServo] Closing container doors...")
         
         if not self.servos_active:
-            print("[3ServoHW] Simulating door close")
+            print("[GPIOServo] Simulating door close")
             return True
         
         left_ok = self._move_servo('layer1_left', self.servos['layer1_left']['closed'])
         right_ok = self._move_servo('layer1_right', self.servos['layer1_right']['closed'])
+        # Move paired servos if configured
+        left2_ok = True
+        right2_ok = True
+        if 'layer1_left2' in self.servos:
+            left2_ok = self._move_servo('layer1_left2', self.servos['layer1_left2']['closed'])
+        if 'layer1_right2' in self.servos:
+            right2_ok = self._move_servo('layer1_right2', self.servos['layer1_right2']['closed'])
         
-        if left_ok and right_ok:
-            print("[3ServoHW] ✓ Doors closed")
+        if left_ok and right_ok and left2_ok and right2_ok:
+            print("[GPIOServo] ✓ Doors closed")
             return True
         else:
-            print(f"[3ServoHW] ⚠ Door close issue (L:{left_ok} R:{right_ok})")
+            print(f"[GPIOServo] ⚠ Door close issue (L:{left_ok} R:{right_ok} L2:{left2_ok} R2:{right2_ok})")
             return False
     
     def set_selector(self, angle):
-        """Set Layer 2 selector to angle (e.g., 60° Bin A, 120° Bin B)"""
+        """Set sudut selector Layer 2.
+        Sudut selector: `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL` di `config.py`.
+        """
         if not self.servos_active:
-            print(f"[3ServoHW] Simulating selector → {angle}°")
+            print(f"[GPIOServo] Simulating selector → {angle}°")
             return True
         
         ok = self._move_servo('layer2_selector', angle)
         if ok:
-            print(f"[3ServoHW] ✓ Selector → {angle}°")
+            print(f"[GPIOServo] ✓ Selector → {angle}°")
         return ok
     
     def reset_to_ready(self):
         """
-        Reset all servos to ready/neutral position:
-        - Layer 1 doors: Closed (horizontal, ready to receive waste)
-        - Layer 2 selector: Neutral (center position ~90°)
+        Reset semua servo ke posisi siap/netral:
+        - Pintu Layer 1: Tertutup (horizontal, siap menerima sampah)
+        - Selector Layer 2: Netral (posisi tengah ~90°)
+        Menggunakan timing dari `config.py`: `SERVO_CLOSE_DELAY`, `SERVO_RESET_DELAY`.
         """
-        print("[3ServoHW] === Resetting system to ready state ===")
+        print("[GPIOServo] === Resetting system to ready state ===")
         
         try:
             # Close Layer 1 doors
-            print("[3ServoHW] Closing Layer 1 doors...")
+            print("[GPIOServo] Closing Layer 1 doors...")
             self.close_doors()
             time.sleep(0.3)
             
             # Center Layer 2 selector
-            print("[3ServoHW] Centering Layer 2 selector...")
+            print("[GPIOServo] Centering Layer 2 selector...")
             neutral = self.servos['layer2_selector']['neutral']
             self.set_selector(neutral)
             time.sleep(0.3)
             
-            print("[3ServoHW] ✓ System ready for next waste item")
+            print("[GPIOServo] ✓ System ready for next waste item")
             return True
             
         except Exception as e:
-            print(f"[3ServoHW] ✗ Reset error: {e}")
+            print(f"[GPIOServo] ✗ Reset error: {e}")
             return False
     
     def execute_sort(self, bin_assignment, bin_angle):
         """
-        Complete sorting sequence with coordinated Layer 1 & Layer 2:
+        Jalankan urutan penyortiran lengkap dengan koordinasi Layer 1 & Layer 2:
         
-        PHASE 1: PREPARE LAYER 2 (Selector)
-        1. Set Layer 2 selector to target bin angle (~30° from neutral, e.g., 60°/120°)
-        2. Wait for selector to be ready (SERVO_DROP_DELAY)
+        FASE 1: SIAPKAN LAYER 2 (Selector)
+        1. Set sudut selector Layer 2 ke bin target (~30° dari netral, mis. 60°/120°)
+        2. Tunggu selector siap (`SERVO_DROP_DELAY` dari config.py)
         
-        PHASE 2: DROP WASTE (Layer 1)
-        3. Open Layer 1 doors (90° down) to drop waste
-        4. Wait for waste to fall through Layer 1 and onto Layer 2
+        FASE 2: JATUHKAN SAMPAH (Layer 1)
+        3. Buka pintu Layer 1 (sudut dari `SERVO_LAYER1_*_OPEN`) untuk menjatuhkan sampah
+        4. Tunggu sampah jatuh dari Layer 1 ke Layer 2 (`SERVO_FALL_TIME`)
         
-        PHASE 3: WASTE ROUTING
-        5. Waste slides on tilted Layer 2 selector into target bin
+        FASE 3: PENGARAHAN SAMPAH
+        5. Sampah meluncur di selector Layer 2 yang miring menuju bin target (`SERVO_SLIDE_TIME`)
         
-        PHASE 4: RESET ALL (Back to original position)
-        6. Close Layer 1 doors back to horizontal
-        7. Return Layer 2 selector to neutral position (~90°)
+        FASE 4: RESET SEMUA (Kembali ke posisi awal)
+        6. Tutup pintu Layer 1 kembali ke horizontal (`SERVO_LAYER1_*_CLOSED`)
+        7. Kembalikan selector Layer 2 ke posisi netral (~90°, `SERVO_LAYER2_NEUTRAL`)
         
-        Total duration includes all servo movements + safety delays
-        This entire sequence is treated as ONE unit during cooldown
-        to prevent motion detection during servo movements.
+        Durasi total termasuk semua gerakan servo + jeda keamanan.
+        Seluruh urutan ini dianggap SATU unit selama cooldown
+        untuk mencegah deteksi gerakan saat servo bergerak.
         """
         print(f"[3ServoHW] === Starting sort to {bin_assignment} ({bin_angle}°) ===")
         
@@ -425,65 +505,65 @@ class ThreeServoHardware:
             print(f"[3ServoHW]   → Tilting selector to {bin_angle}° ({bin_assignment})")
             self.set_selector(bin_angle)
             time.sleep(config.SERVO_DROP_DELAY)  # Wait for selector to tilt and stabilize
-            print(f"[3ServoHW]   ✓ Layer 2 selector ready at {bin_angle}°")
+            print(f"[GPIOServo]   ✓ Layer 2 selector ready at {bin_angle}°")
             
             # PHASE 2: DROP WASTE (Layer 1 doors open AFTER Layer 2 is ready)
-            print(f"[3ServoHW] PHASE 2 - Dropping waste from Layer 1...")
-            print(f"[3ServoHW]   → Opening container doors (90° down)")
+            print(f"[GPIOServo] PHASE 2 - Dropping waste from Layer 1...")
+            print(f"[GPIOServo]   → Opening container doors (90° down)")
             self.open_doors()  # Includes SERVO_OPEN_DURATION delay
-            print(f"[3ServoHW]   ✓ Waste drops through Layer 1")
+            print(f"[GPIOServo]   ✓ Waste drops through Layer 1")
             
             # PHASE 3: WASTE ROUTING (gravity + tilted selector)
-            print(f"[3ServoHW] PHASE 3 - Waste routing on Layer 2...")
-            print(f"[3ServoHW]   → Waste slides on tilted selector to {bin_assignment}")
+            print(f"[GPIOServo] PHASE 3 - Waste routing on Layer 2...")
+            print(f"[GPIOServo]   → Waste slides on tilted selector to {bin_assignment}")
             time.sleep(0.5)  # Time for waste to fall from Layer 1 to Layer 2
-            print(f"[3ServoHW]   ✓ Waste routed to {bin_assignment}")
+            print(f"[GPIOServo]   ✓ Waste routed to {bin_assignment}")
             
             # PHASE 4: RESET ALL (Back to ready position)
-            print(f"[3ServoHW] PHASE 4 - Resetting to ready position...")
+            print(f"[GPIOServo] PHASE 4 - Resetting to ready position...")
             
             # Close Layer 1 doors
-            print(f"[3ServoHW]   → Closing Layer 1 doors")
+            print(f"[GPIOServo]   → Closing Layer 1 doors")
             self.close_doors()
             time.sleep(0.2)  # Safety delay for doors to fully close
-            print(f"[3ServoHW]   ✓ Layer 1 doors closed")
+            print(f"[GPIOServo]   ✓ Layer 1 doors closed")
             
             # Return Layer 2 selector to neutral
-            print(f"[3ServoHW]   → Returning Layer 2 to neutral")
+            print(f"[GPIOServo]   → Returning Layer 2 to neutral")
             neutral = self.servos['layer2_selector']['neutral']
             self.set_selector(neutral)
             time.sleep(0.2)  # Safety delay for selector to center
-            print(f"[3ServoHW]   ✓ Layer 2 at neutral position")
+            print(f"[GPIOServo]   ✓ Layer 2 at neutral position")
             
             # CRITICAL: Verify all servos are at expected positions
-            print(f"[3ServoHW] === POSITION VERIFICATION ===")
+            print(f"[GPIOServo] === POSITION VERIFICATION ===")
             positions = self.verify_positions()
             all_verified = True
             
             for servo_id, status in positions.items():
                 if status['verified']:
-                    print(f"[3ServoHW]   ✓ {servo_id}: {status['expected']}° (verified)")
+                    print(f"[GPIOServo]   ✓ {servo_id}: {status['expected']}° (verified)")
                 else:
-                    print(f"[3ServoHW]   ✗ {servo_id}: Position mismatch!")
+                    print(f"[GPIOServo]   ✗ {servo_id}: Position mismatch!")
                     all_verified = False
             
             if not all_verified:
-                print(f"[3ServoHW]   ⚠️  Position drift detected - forcing reset...")
+                print(f"[GPIOServo]   ⚠️  Position drift detected - forcing reset...")
                 self.reset_to_ready_position()
             
-            print(f"[3ServoHW] === ✓ SORT COMPLETE → {bin_assignment} ===")
-            print(f"[3ServoHW] All servos verified at ready state\n")
+            print(f"[GPIOServo] === ✓ SORT COMPLETE → {bin_assignment} ===")
+            print(f"[GPIOServo] All servos verified at ready state\n")
             return True
             
         except Exception as e:
-            print(f"[3ServoHW] ✗ Sort error: {e}")
+            print(f"[GPIOServo] ✗ Sort error: {e}")
             import traceback
             traceback.print_exc()
             return False
     
     def cleanup(self):
         """Stop all PWM and cleanup GPIO"""
-        print("[3ServoHW] Cleaning up...")
+        print("[GPIOServo] Cleaning up...")
         
         if self.has_gpio:
             for sid, servo in self.servos.items():
@@ -491,13 +571,13 @@ class ThreeServoHardware:
                     try:
                         servo['pwm'].stop()
                     except Exception as e:
-                        print(f"[3ServoHW] Stop error {sid}: {e}")
+                        print(f"[GPIOServo] Stop error {sid}: {e}")
             
             try:
                 GPIO.cleanup()
-                print("[3ServoHW] GPIO cleanup done")
+                print("[GPIOServo] GPIO cleanup done")
             except Exception as e:
-                print(f"[3ServoHW] Cleanup error: {e}")
+                print(f"[GPIOServo] Cleanup error: {e}")
     
     def get_status(self):
         """Get servo system status"""
@@ -513,19 +593,19 @@ class ThreeServoHardware:
 # Test program
 if __name__ == "__main__":
     print("="*60)
-    print("3-Servo System Test - Raspberry Pi 5")
+    print("GPIO Servo System Test")
     print("Testing with safety delays and complete reset")
     print("="*60)
     
     try:
-        hw = ThreeServoHardware()
+        hw = GpioServoHardware()
         
         # Show status
         status = hw.get_status()
         print(f"\nSystem Status:")
         print(f"  Active: {status['active']}")
         print(f"  GPIO: {status['has_gpio']}")
-        print(f"  Servos: {status['count']}/3")
+        print(f"  Servos: {status['count']}")
         
         for sid, info in status['servos'].items():
             print(f"  - {info['name']}: GPIO {info['pin']}")

@@ -153,7 +153,7 @@ PROXIMITY_SENSOR_PIN = 17
 #   * Kanan: `SERVO_LAYER1_RIGHT_PIN`, `SERVO_LAYER1_RIGHT_CLOSED`, `SERVO_LAYER1_RIGHT_OPEN`
 # - Layer 2 (selector ke Bin A/B): atur `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL`.
 # - Arah terbalik? Tukar nilai BIN_A dan BIN_B, atau geser ± beberapa derajat.
-# - Uji aman gerakan: `python3 src/hardware/three_servo_hardware.py` (simulasi di Mac, real di RPi).
+# - Uji aman gerakan: `python3 src/hardware/gpio_servo_hardware.py` (simulasi di Mac, real di RPi).
 # - Pakai driver PCA9685? Lihat `src/hardware/hardware_interface_rpi.py` dan variabel `SERVO_CHANNEL` (legacy).
 # - Tips: mulai dari NEUTRAL=90°, buka pintu ±90°; sesuaikan kecil dulu (±5°).
 

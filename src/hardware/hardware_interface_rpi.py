@@ -16,7 +16,7 @@ Hardware yang diperlukan:
 #   Cek deteksi: `python3 -m src.core.camera_detector`.
 # - Servo (opsi PCA9685): atur channel & sudut default di bagian "Servo Configuration"
 #   → `self.SERVO_CHANNEL`, `self.SERVO_ANGLE_BIN_A/B/NEUTRAL` (legacy untuk mode PCA9685)
-#   Untuk 3-servo (GPIO PWM langsung), gunakan `src/hardware/three_servo_hardware.py`
+#   Untuk GPIO servo (PWM langsung), gunakan `src/hardware/gpio_servo_hardware.py`
 #   dan set derajat di `config.py` (lebih umum dipakai di proyek ini).
 
 import time
@@ -24,6 +24,8 @@ import numpy as np
 from typing import Optional
 import sys
 import os
+import cv2
+import config
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
@@ -91,6 +93,8 @@ class HardwareInterface:
         self.trigger_cooldown = 1.0
         # Preview window name (for OpenCV display)
         self.window_name = "Orange Box - Camera View"
+        # Logo (untuk fancy UI)
+        self._logo = None
         # Camera logging control (avoid spam)
         self._last_frame_log_time = 0
         self._frame_log_interval = 5.0  # seconds
@@ -103,6 +107,12 @@ class HardwareInterface:
         self._initialize_gpio()
         self._initialize_camera()
         self._initialize_servo()
+        self._load_logo()
+        # Siapkan window agar resizable (lebih konsisten render teks)
+        try:
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        except Exception:
+            pass
         
         print("[HardwareInterface] Raspberry Pi hardware initialized")
     
@@ -256,6 +266,57 @@ class HardwareInterface:
         if self.camera is None:
             print("[ERROR] Camera not initialized")
             return None
+
+    # ====== UI Helpers (ported minimal dari mock untuk selaraskan gaya) ======
+    def _load_logo(self):
+        """Muat logo dari assets jika tersedia (opsional)."""
+        try:
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets', 'logo-orangebox.png')
+            if os.path.exists(logo_path):
+                logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
+                if logo is not None and logo.shape[2] == 4:
+                    # Convert RGBA to BGR (drop alpha for simple overlay)
+                    self._logo = cv2.cvtColor(logo, cv2.COLOR_BGRA2BGR)
+                else:
+                    self._logo = logo
+        except Exception:
+            self._logo = None
+
+    def _overlay_logo(self, img, logo, x, y):
+        try:
+            if logo is None:
+                return
+            h, w = logo.shape[:2]
+            roi = img[y:y+h, x:x+w]
+            if roi.shape[:2] != (h, w):
+                return
+            # Simple paste (no alpha blending for performance)
+            img[y:y+h, x:x+w] = logo
+        except Exception:
+            pass
+
+    def _draw_filled_rounded_rect(self, img, x, y, w, h, color, radius=10):
+        try:
+            radius = max(0, min(radius, min(w, h)//2))
+            # Center rectangle
+            cv2.rectangle(img, (x+radius, y), (x+w-radius, y+h), color, -1)
+            # Side rectangles
+            cv2.rectangle(img, (x, y+radius), (x+w, y+h-radius), color, -1)
+            # Corners
+            cv2.circle(img, (x+radius, y+radius), radius, color, -1)
+            cv2.circle(img, (x+w-radius-1, y+radius), radius, color, -1)
+            cv2.circle(img, (x+radius, y+h-radius-1), radius, color, -1)
+            cv2.circle(img, (x+w-radius-1, y+h-radius-1), radius, color, -1)
+        except Exception:
+            pass
+
+    def _put_text_with_shadow(self, img, text, org, font, scale, color, thickness=1, shadow_color=(0,0,0)):
+        try:
+            x, y = org
+            cv2.putText(img, text, (x+1, y+1), font, scale, shadow_color, thickness+2, cv2.LINE_AA)
+            cv2.putText(img, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
+        except Exception:
+            pass
         
         try:
             if self.camera_type == "picamera":
@@ -360,30 +421,55 @@ class HardwareInterface:
         try:
             if frame is None:
                 return
-            import cv2
             display = frame.copy()
             h, w = display.shape[:2]
+            font = cv2.FONT_HERSHEY_SIMPLEX
 
-            # Top bar background
-            cv2.rectangle(display, (0, 0), (w, 60), (40, 40, 45), -1)
-
-            # Title
-            cv2.putText(display, "Orange Box", (12, 28), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8, (235, 235, 240), 2, cv2.LINE_AA)
+            if getattr(config, 'FANCY_UI', False):
+                # Fancy top bar
+                bar_h = 70
+                self._draw_filled_rounded_rect(display, 6, 6, w-12, bar_h, (28,28,32), radius=12)
+                # Logo dan judul
+                logo_x, logo_y = 16, 15
+                if self._logo is not None:
+                    self._overlay_logo(display, self._logo, logo_x, logo_y)
+                    text_x = logo_x + self._logo.shape[1] + 12
+                else:
+                    text_x = logo_x + 4
+                self._put_text_with_shadow(display, "Orange Box", (text_x, 30), font, 0.75, (230,230,235), thickness=2)
+            else:
+                # Minimal top bar
+                cv2.rectangle(display, (0, 0), (w, 60), (40, 40, 45), -1)
+                cv2.putText(display, "Orange Box", (12, 28), font, 0.8, (235,235,240), 2, cv2.LINE_AA)
 
             # Determine status text
             status_text = text.strip() if text else ""
             if not status_text and prediction and isinstance(prediction, dict):
                 status_text = str(prediction.get("status", ""))
             if status_text:
-                cv2.circle(display, (14, 46), 5, (0, 200, 255), -1)
-                cv2.putText(display, status_text, (26, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.55, (210, 210, 215), 1, cv2.LINE_AA)
+                if getattr(config, 'FANCY_UI', False):
+                    cv2.circle(display, (14, 46), 5, (0, 200, 255), -1)
+                    self._put_text_with_shadow(display, status_text, (26, 50), font, 0.55, (210,210,215), thickness=1)
+                else:
+                    cv2.circle(display, (14, 46), 5, (0, 200, 255), -1)
+                    cv2.putText(display, status_text, (26, 50), font, 0.55, (210,210,215), 1, cv2.LINE_AA)
 
             # Draw bbox if provided
             if prediction and isinstance(prediction, dict) and prediction.get("bbox"):
                 x1, y1, x2, y2 = prediction["bbox"]
-                cv2.rectangle(display, (x1, y1), (x2, y2), (0, 200, 255), 2)
+                if getattr(config, 'FANCY_UI', False):
+                    corner_len = max(12, (x2-x1)//7)
+                    color = (0, 200, 255)
+                    cv2.line(display, (x1, y1), (x1+corner_len, y1), color, 2)
+                    cv2.line(display, (x1, y1), (x1, y1+corner_len), color, 2)
+                    cv2.line(display, (x2, y1), (x2-corner_len, y1), color, 2)
+                    cv2.line(display, (x2, y1), (x2, y1+corner_len), color, 2)
+                    cv2.line(display, (x1, y2), (x1+corner_len, y2), color, 2)
+                    cv2.line(display, (x1, y2), (x1, y2-corner_len), color, 2)
+                    cv2.line(display, (x2, y2), (x2-corner_len, y2), color, 2)
+                    cv2.line(display, (x2, y2), (x2, y2-corner_len), color, 2)
+                else:
+                    cv2.rectangle(display, (x1, y1), (x2, y2), (0, 200, 255), 2)
 
             # Show label & confidence (simple badge)
             if prediction and isinstance(prediction, dict) and prediction.get("label"):
@@ -391,30 +477,46 @@ class HardwareInterface:
                 conf = float(prediction.get("confidence", 0.0))
                 badge = f"{label}  {conf*100:.1f}%"
                 # Badge background
-                size, _ = cv2.getTextSize(badge, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                size, _ = cv2.getTextSize(badge, font, 0.6, 2)
                 bx, by = 12, 68
                 bw, bh = size[0] + 16, size[1] + 14
-                cv2.rectangle(display, (bx, by), (bx+bw, by+bh), (32, 34, 38), -1)
-                cv2.putText(display, badge, (bx+10, by+bh-8), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6, (240, 240, 240), 2, cv2.LINE_AA)
+                if getattr(config, 'FANCY_UI', False):
+                    self._draw_filled_rounded_rect(display, bx, by, bw, bh, (32,34,38), radius=8)
+                    self._put_text_with_shadow(display, badge, (bx+10, by+bh-8), font, 0.6, (240,240,240), thickness=2)
+                else:
+                    cv2.rectangle(display, (bx, by), (bx+bw, by+bh), (32, 34, 38), -1)
+                    cv2.putText(display, badge, (bx+10, by+bh-8), font, 0.6, (240,240,240), 2, cv2.LINE_AA)
 
             # Location chip (bottom-left)
             if prediction and isinstance(prediction, dict) and prediction.get("location"):
                 loc = str(prediction["location"])[:64]
-                size, _ = cv2.getTextSize(loc, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                size, _ = cv2.getTextSize(loc, font, 0.5, 1)
                 lx, ly = 10, h - 18
-                cv2.rectangle(display, (lx-4, ly-size[1]-10), (lx+size[0]+8, ly+6), (30, 35, 40), -1)
-                cv2.putText(display, loc, (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (100, 200, 255), 1, cv2.LINE_AA)
+                if getattr(config, 'FANCY_UI', False):
+                    self._draw_filled_rounded_rect(display, lx-4, ly-size[1]-10, size[0]+12, size[1]+16, (30,35,40), radius=10)
+                    self._put_text_with_shadow(display, loc, (lx, ly), font, 0.5, (100,200,255), thickness=1)
+                else:
+                    cv2.rectangle(display, (lx-4, ly-size[1]-10), (lx+size[0]+8, ly+6), (30, 35, 40), -1)
+                    cv2.putText(display, loc, (lx, ly), font, 0.5, (100, 200, 255), 1, cv2.LINE_AA)
 
             # Instruction pill (bottom-right)
             instr = "Tekan 'q' untuk keluar"
-            size, _ = cv2.getTextSize(instr, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            size, _ = cv2.getTextSize(instr, font, 0.5, 1)
             px, py = w - size[0] - 20, h - 18
-            cv2.rectangle(display, (px-10, py-size[1]-10), (px+size[0]+10, py+6), (30, 30, 34), -1)
-            cv2.putText(display, instr, (px, py), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (245, 245, 245), 1, cv2.LINE_AA)
+            if getattr(config, 'FANCY_UI', False):
+                self._draw_filled_rounded_rect(display, px-10, py-size[1]-10, size[0]+20, size[1]+16, (30,30,34), radius=14)
+                self._put_text_with_shadow(display, instr, (px, py), font, 0.5, (245,245,245), thickness=1)
+            else:
+                cv2.rectangle(display, (px-10, py-size[1]-10), (px+size[0]+10, py+6), (30, 30, 34), -1)
+                cv2.putText(display, instr, (px, py), font, 0.5, (245, 245, 245), 1, cv2.LINE_AA)
 
+            # Render dengan ukuran konsisten agar teks tajam
+            try:
+                base_w, base_h = 1280, 720
+                if display.shape[1] != base_w or display.shape[0] != base_h:
+                    display = cv2.resize(display, (base_w, base_h), interpolation=cv2.INTER_LINEAR)
+            except Exception:
+                pass
             cv2.imshow(self.window_name, display)
             cv2.waitKey(1)
         except Exception:

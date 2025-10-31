@@ -289,18 +289,21 @@ Ready to begin?"""
                 ("Installing system packages",
                  "sudo apt-get install -y python3-pip python3-opencv python3-numpy python3-picamera2 "
                  "python3-rpi.gpio libopenblas-dev liblapack-dev libraspberrypi-dev "
-                 "libcamera-dev libcamera-apps libmysqlclient-dev v4l-utils git dialog whiptail python3-venv", 30),
+                 "libcamera-dev libcamera-apps libmysqlclient-dev v4l-utils git dialog whiptail python3-venv "
+                 "i2c-tools python3-smbus", 30),
                 ("Creating Python venv", f"cd {self.project_dir} && python3 -m venv .venv", 40),
                 ("Upgrading pip (venv)", f"{self.project_dir}/.venv/bin/pip install --upgrade pip", 50),
                 ("Installing Python packages (venv)", f"{self.project_dir}/.venv/bin/pip install -r {self.project_dir}/requirements.txt", 70),
             ]
             if self.config['has_gps']:
                 steps.append(("Installing GPS packages", "sudo apt-get install -y gpsd gpsd-clients python3-gps", 85))
+            # Enable camera/SPI/I2C for hardware modules
+            steps.append(("Enabling camera/SPI/I2C", "sudo raspi-config nonint do_camera 0 || true && sudo raspi-config nonint do_spi 0 || true && sudo raspi-config nonint do_i2c 0 || true", 90))
         else:
             # macOS atau platform lain: untuk simulasi, lewati instalasi berat
             steps = [
                 ("Skipping system packages on non-Linux", f"echo 'Skip system packages for {sysname}'", 30),
-                ("Dependencies placeholder", "echo 'Assume Python deps are pre-installed'", 60),
+                ("Installing Python deps (requirements)", f"pip3 install -r {self.project_dir}/requirements.txt", 60),
             ]
             print(f"\n{Colors.WARNING}⚠️  Non-Linux detected ({sysname}). Skipping heavy dependency installation for simulation.{Colors.ENDC}")
 
@@ -444,7 +447,7 @@ User={os.getenv('USER', 'pi')}
 WorkingDirectory={self.project_dir}
 Environment="DISPLAY=:0"
 Environment="PYTHONUNBUFFERED=1"
-ExecStart=/usr/bin/python3 {self.project_dir}/main.py --model {self.project_dir}/models/model_quant_infer.tflite --camera {self.config['camera_index']}
+ExecStart={self.project_dir}/.venv/bin/python3 {self.project_dir}/main.py --model {self.project_dir}/models/model_quant_infer.tflite --camera {self.config['camera_index']}
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -497,7 +500,7 @@ WantedBy=multi-user.target
         """Test if installation is successful"""
         tests = [
             ("Camera detection (USB/libcamera)", "v4l2-ctl --list-devices || libcamera-hello --list-cameras"),
-            ("Python imports", f"python3 -c 'import cv2, numpy, tflite_runtime'"),
+            ("Python imports", f"{self.project_dir}/.venv/bin/python3 -c 'import cv2, numpy, tflite_runtime, RPi.GPIO' || {self.project_dir}/.venv/bin/python3 -c 'import cv2, numpy, tflite_runtime'"),
             ("Model file", f"test -f {self.project_dir}/models/model_quant_infer.tflite && echo OK"),
             ("Config file", f"test -f {self.project_dir}/config.py && echo OK"),
             ("Device ID", f"test -f {self.project_dir}/device_config.txt && echo OK")
@@ -506,6 +509,9 @@ WantedBy=multi-user.target
         # Add GPS test if configured
         if self.config['has_gps']:
             tests.append(("GPS daemon", "systemctl is-enabled gpsd 2>/dev/null && echo OK || echo DISABLED"))
+        
+        # Optional: Servo test (simulasi di non-RPi)
+        tests.append(("Servo test", f"{self.project_dir}/.venv/bin/python3 {self.project_dir}/scripts/test_servo_simple.py || true"))
         
         print(f"\n{Colors.HEADER}{'='*60}")
         print("RUNNING TESTS")
@@ -615,7 +621,7 @@ WantedBy=multi-user.target
             height=12, width=70
         )
         res = subprocess.run(
-            ['python3', str(self.project_dir / 'src' / 'hardware' / 'three_servo_hardware.py')],
+            ['python3', str(self.project_dir / 'src' / 'hardware' / 'gpio_servo_hardware.py')],
             capture_output=True, text=True
         )
         if res.returncode == 0:

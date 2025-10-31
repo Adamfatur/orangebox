@@ -13,11 +13,11 @@ Dokumen singkat untuk bantu kamu mengatur servo, kamera, dan opsi hardware lain 
   - Atur `OPEN` sekitar `90°` dulu, tes, lalu geser ±5° sesuai kebutuhan mekanik.
   - Arah kebalik? Tukar nilai `BIN_A` ↔ `BIN_B` atau geser beberapa derajat.
 - Mode uji aman (tanpa AI):
-  - Jalankan: `python3 src/hardware/three_servo_hardware.py`
+- Jalankan: `python3 src/hardware/gpio_servo_hardware.py`
   - Di macOS: simulasi (print saja). Di Raspberry Pi: servo fisik bergerak.
 
 Catatan: Ada dua cara kontrol servo di repo ini:
-- 3-Servo langsung via GPIO PWM (umum dipakai): `src/hardware/three_servo_hardware.py` membaca semua nilai dari `config.py`.
+- GPIO langsung via PWM (umum dipakai): `src/hardware/gpio_servo_hardware.py` membaca semua nilai dari `config.py`.
 - Alternatif PCA9685 (I2C driver): `src/hardware/hardware_interface_rpi.py` bagian "Servo Configuration" (legacy). Kalau kamu pakai ini, atur `SERVO_CHANNEL` dan sudut di file tersebut.
 
 ## 🎥 Di mana atur KAMERA?
@@ -43,7 +43,7 @@ Catatan: Ada dua cara kontrol servo di repo ini:
    - `python3 -m src.core.camera_detector`
    - atau run app dengan pilih kamera manual: `python3 main.py --camera 0`
 2) Tes servo saja (aman):
-   - `python3 src/hardware/three_servo_hardware.py`
+- `python3 src/hardware/gpio_servo_hardware.py`
 3) Tes penuh (RPi):
    - Pastikan `PLATFORM = 'rpi'` di `config.py`.
    - `python3 main.py`
@@ -60,7 +60,7 @@ Catatan: Ada dua cara kontrol servo di repo ini:
 
 ## 📁 Referensi File yang Sering Disentuh
 - `config.py` → Semua pengaturan inti (servo, kamera, timing)
-- `src/hardware/three_servo_hardware.py` → Implementasi 3-servo via GPIO (baca dari config)
+- `src/hardware/gpio_servo_hardware.py` → Implementasi GPIO servo untuk pintu dan selector (baca dari config)
 - `src/hardware/hardware_interface_rpi.py` → Alternatif dengan PCA9685 + kamera
 - `src/core/camera_detector.py` → Deteksi otomatis kamera
 

@@ -79,15 +79,17 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     sudo apt-get install -y i2c-tools python3-smbus
 
     echo "Installing Python packages for Raspberry Pi (in venv)..."
-    # Core Python libs in venv
-    .venv/bin/pip install numpy RPi.GPIO gpiozero pymysql pynmea2
-    # TFLite runtime (prefer runtime; fallback to TensorFlow if wheel unavailable)
-    if ! .venv/bin/pip install tflite-runtime 2>/dev/null; then
-        echo "⚠️  TFLite runtime not available for this arch, installing TensorFlow (may be heavy)..."
-        .venv/bin/pip install tensorflow
+    # Upgrade build tools in venv
+    .venv/bin/pip install --upgrade pip setuptools wheel
+    # Install all project requirements into venv to ensure cv2, servo, GPS, DB, etc. tersedia
+    if ! .venv/bin/pip install -r requirements.txt; then
+        echo "⚠️  Some requirements failed; continuing with fallbacks where possible"
     fi
-    # Adafruit PCA9685 + motor (optional; for I2C servo driver boards)
-    .venv/bin/pip install adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-motor
+    # Prefer TFLite runtime; fallback ke TensorFlow jika modul tidak tersedia
+    if ! .venv/bin/python3 -c "import tflite_runtime" 2>/dev/null; then
+        echo "⚠️  tflite-runtime tidak tersedia, memasang TensorFlow (mungkin berat)..."
+        .venv/bin/pip install tensorflow || true
+    fi
 
     # Enable camera and GPIO/I2C/SPI
     echo "Enabling camera and GPIO/I2C/SPI..."
@@ -99,16 +101,16 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     echo ""
     echo "✅ Python virtual environment ready"
     echo "To activate: source .venv/bin/activate"
-    echo "To run app: .venv/bin/python3 main.py (or ./start.sh)"
+    echo "To run app: .venv/bin/python3 main.py (atau ./start.sh)"
     echo "To run servo test: .venv/bin/python3 scripts/test_servo_simple.py"
     
 elif [[ "$PLATFORM" == "mac" ]]; then
     # macOS - lighter installation
     echo "Installing Python packages..."
     pip3 install --upgrade pip
-    pip3 install numpy opencv-python
+    pip3 install -r requirements.txt
     
-    # Try TFLite first, fallback to TensorFlow
+    # Try TFLite first, fallback to TensorFlow (requirements may fail on macOS)
     if ! pip3 install tflite-runtime 2>/dev/null; then
         echo "⚠️  TFLite runtime not available, installing TensorFlow..."
         pip3 install tensorflow
@@ -253,9 +255,9 @@ else
 fi
 echo ""
 echo "🚀 Ready to run!"
-echo "  Test mode: python3 main.py --test"
-echo "  Full mode: python3 main.py"
-echo "  Or use: ./start.sh"
+echo "  Test mode: .venv/bin/python3 main.py --test"
+echo "  Full mode: .venv/bin/python3 main.py"
+echo "  Atau gunakan: ./start.sh"
 echo ""
 echo "📝 Configuration backup saved as: config.py.backup"
 echo ""

@@ -19,8 +19,8 @@ Environment="DISPLAY=:0"
 Environment="PYTHONUNBUFFERED=1"
 Environment="PYTHONPATH=/home/pi/orangebox"
 
-# Main command (camera auto-detection enabled)
-ExecStart=/usr/bin/python3 /home/pi/orangebox/main.py --model /home/pi/orangebox/models/model_quant_infer.tflite
+# Main command (gunakan interpreter dari virtual environment untuk stabilitas)
+ExecStart=/home/pi/orangebox/.venv/bin/python3 /home/pi/orangebox/main.py --model /home/pi/orangebox/models/model_quant_infer.tflite
 
 # Restart policy
 Restart=always

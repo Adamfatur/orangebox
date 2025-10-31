@@ -65,3 +65,5 @@ logs/
 *.bak
 *.swp
 *~
+# Ignore external reference code folder
+all-code-main/
