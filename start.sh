@@ -39,7 +39,8 @@ fi
 echo "🚀 Starting..."
 if [ "$IS_RPI" = true ]; then
   # Mode produksi di Raspberry Pi
-  exec $PYTHON_BIN main.py $MODEL_ARG --camera 0 "$@"
+  # Biarkan hardware interface auto-detect: PiCamera2 → USB webcam
+  exec $PYTHON_BIN main.py $MODEL_ARG "$@"
 else
   # Mode simulasi di macOS/Non-RPi
   exec $PYTHON_BIN main.py --test --confidence 0.7 "$@"
