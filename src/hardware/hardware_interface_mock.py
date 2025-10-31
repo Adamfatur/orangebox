@@ -177,7 +177,12 @@ class HardwareInterface:
             
             if camera_info:
                 self.camera_config = camera_info
-                self.camera_index = camera_info['index']
+                idx = camera_info.get('index')
+                if idx is None:
+                    # If detector returns None (e.g., PiCamera path), default to 0 for OpenCV
+                    print("[HardwareInterface] ℹ️ Index None from detector; defaulting to 0 for OpenCV")
+                    idx = 0
+                self.camera_index = idx
                 print(f"[HardwareInterface] ✓ Selected: {camera_info['name']} (index {self.camera_index})")
             else:
                 print("[HardwareInterface] ⚠ No camera detected, defaulting to index 0")

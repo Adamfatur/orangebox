@@ -97,12 +97,26 @@ if [[ "$PLATFORM" == "rpi" ]]; then
         .venv/bin/pip install tensorflow || true
     fi
 
-    # Enable camera and GPIO/I2C/SPI
+    # Enable camera and GPIO/I2C/SPI (guarded with timeout to avoid hanging)
     echo "Enabling camera and GPIO/I2C/SPI..."
-    # Note: On Raspberry Pi OS Bookworm, camera works via libcamera; do_camera is kept for legacy compatibility
-    sudo raspi-config nonint do_camera 0 || true
-    sudo raspi-config nonint do_spi 0 || true
-    sudo raspi-config nonint do_i2c 0 || true
+    # On Raspberry Pi OS Bookworm, camera works via libcamera; do_camera remains for legacy
+    ENABLE_CMDS=(
+        "raspi-config nonint do_camera 0"
+        "raspi-config nonint do_spi 0"
+        "raspi-config nonint do_i2c 0"
+    )
+    for CMD in "${ENABLE_CMDS[@]}"; do
+        if command -v timeout >/dev/null 2>&1; then
+            # Limit to 8s per command to avoid script getting stuck
+            if ! sudo timeout 8s bash -lc "$CMD"; then
+                echo "   ↪ Skipped ($CMD) due to timeout or non-critical error"
+            fi
+        else
+            # Fallback without timeout (still non-fatal)
+            sudo bash -lc "$CMD" || true
+        fi
+    done
+    echo "Done enabling interfaces (reboot may be required)."
 
     echo ""
     echo "✅ Python virtual environment ready"
