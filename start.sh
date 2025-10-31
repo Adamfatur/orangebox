@@ -1,80 +1,46 @@
 #!/bin/bash
-# 🚀 OrangeBox Quick Start
+# 🚀 OrangeBox Quick Start (non-interaktif, satu perintah)
 
-echo "� OrangeBox Waste Sorter System"
-echo "=================================="
-echo ""
+set -e
 
-# Kill any existing instance
-pkill -f "python3 main.py" 2>/dev/null
-[ $? -eq 0 ] && echo "⏹️  Stopped existing instance" && sleep 1
+# Pindah ke direktori proyek
+cd "$(dirname "$0")"
 
-echo "🚀 Starting system..."
+echo "🧡 OrangeBox Waste Sorter System"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Prefer Python from virtual environment if available
+# Pilih interpreter: gunakan venv jika tersedia
 PYTHON_BIN="python3"
 if [ -x ".venv/bin/python3" ]; then
   PYTHON_BIN=".venv/bin/python3"
 fi
 
-$PYTHON_BIN main.py --model models/model_quant_infer.tflite
-
-# Change to script directory
-cd "$(dirname "$0")"
-
-# Check if dependencies are installed
+# Pastikan dependency siap: jika cv2 tidak bisa di-import, jalankan installer otomatis
 if ! $PYTHON_BIN -c "import cv2" 2>/dev/null; then
-    echo "📦 Dependencies not installed!"
-    echo ""
-    read -p "Install now? (y/n): " install_choice
-    
-    if [ "$install_choice" = "y" ] || [ "$install_choice" = "Y" ]; then
-        ./install.sh
-    else
-        echo ""
-        echo "Please install manually:"
-        echo "  pip3 install -r requirements.txt"
-        echo ""
-        exit 1
-    fi
-    echo ""
+  echo "📦 Dependencies belum lengkap. Menjalankan installer..."
+  bash ./install.sh
+  PYTHON_BIN=".venv/bin/python3"
 fi
 
-# Check for model files
-if [ ! -f "models/model.tflite" ]; then
-    echo "⚠️  Model file tidak ditemukan!"
-    echo ""
-    echo "Pilih mode:"
-    echo "1) Test mode (tanpa model AI)"
-    echo "2) Exit dan setup model dulu"
-    read -p "Pilihan (1/2): " choice
-    
-    case $choice in
-        1)
-            echo ""
-            echo "🎮 Running in TEST MODE..."
-            $PYTHON_BIN run.py --test
-            ;;
-        2)
-            echo ""
-            echo "Setup model:"
-            echo "1. Buka: https://teachablemachine.withgoogle.com/"
-            echo "2. Train model dengan 2 class: ORGANIC dan ANORGANIC"
-            echo "3. Export sebagai TensorFlow Lite"
-            echo "4. Letakkan model.tflite dan labels.txt di folder models/"
-            echo ""
-            echo "Atau jalankan: ./start.sh untuk test mode"
-            exit 0
-            ;;
-        *)
-            echo "Invalid choice"
-            exit 1
-            ;;
-    esac
+# Deteksi platform sederhana
+IS_RPI=false
+if [ -f /proc/cpuinfo ] && grep -q "Raspberry Pi" /proc/cpuinfo; then
+  IS_RPI=true
+fi
+
+# Tentukan model TFLite jika ada
+MODEL_ARG=""
+if [ -f "models/model_quant_infer.tflite" ]; then
+  MODEL_ARG="--model models/model_quant_infer.tflite"
+elif [ -f "models/model_float32_infer.tflite" ]; then
+  MODEL_ARG="--model models/model_float32_infer.tflite"
+fi
+
+echo "🚀 Starting..."
+if [ "$IS_RPI" = true ]; then
+  # Mode produksi di Raspberry Pi
+  exec $PYTHON_BIN main.py $MODEL_ARG --camera 0 "$@"
 else
-    echo "✅ Model ditemukan!"
-    echo ""
-    echo "🚀 Starting Waste Sorter System..."
-    echo ""
-    $PYTHON_BIN run.py "$@"
+  # Mode simulasi di macOS/Non-RPi
+  exec $PYTHON_BIN main.py --test --confidence 0.7 "$@"
 fi
