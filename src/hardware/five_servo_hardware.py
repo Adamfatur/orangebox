@@ -134,8 +134,22 @@ class FiveServoHardware:
             if not HAS_SERVOKIT or self.kit is None:
                 print(f"[5ServoHW] Simulate move CH{channel} → {angle}°")
                 return True
+            # Gerakkan ke sudut target
             self.kit.servo[channel].angle = angle
+            # Waktu gerak utama
             time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))
+            # Tambahan waktu hold untuk lock mekanik
+            hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
+            if hold_time and hold_time > 0:
+                time.sleep(hold_time)
+            # Nonaktifkan sinyal untuk mencegah jitter/rotasi berkelanjutan
+            # Mirip dengan implementasi GPIO yang set duty=0 setelah bergerak
+            try:
+                if getattr(config, 'SERVO_STOP_JITTER', True):
+                    self.kit.servo[channel].angle = None
+            except Exception:
+                # Jika detach gagal (perubahan API), abaikan
+                pass
             return True
         except Exception as e:
             print(f"[5ServoHW] Move error CH{channel} → {angle}°: {e}")
