@@ -119,15 +119,22 @@ def main():
         # Initialize components
         print("🔧 Initializing components...\n")
         
+        # CRITICAL: Initialize camera FIRST (lightweight) before model (memory-intensive)
+        # This prevents memory conflict segfaults between libcamera and TFLite
+        
         # Initialize hardware interface
         if args.camera is None:
             print(f"[1/3] Initializing Hardware Interface (Auto-detect camera)...")
         else:
             print(f"[1/3] Initializing Hardware Interface (Camera {args.camera})...")
-        hw = HardwareInterface(camera_index=args.camera)
-        print("      ✓ Hardware Interface initialized\n")
         
-        # Initialize classifier
+        # Force camera init before any TFLite operations
+        print("      → Camera initialization starting...")
+        hw = HardwareInterface(camera_index=args.camera)
+        print("      ✓ Hardware Interface initialized")
+        print("      ✓ Camera locked and ready\n")
+        
+        # Now safe to load TFLite model (camera already allocated)
         print("[2/3] Initializing Waste Classifier...")
         
         if args.test:

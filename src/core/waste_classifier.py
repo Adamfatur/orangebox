@@ -36,39 +36,104 @@ class WasteClassifier:
         self._load_labels()
     
     def _load_model(self):
-        """Load TensorFlow Lite model dan setup interpreter."""
+        """
+        Load TensorFlow Lite model dan setup interpreter.
+        
+        CRITICAL: This can segfault if:
+        - Model file is corrupt
+        - Incompatible TFLite version
+        - Memory allocation fails
+        """
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model file tidak ditemukan: {self.model_path}")
         
+        # Check model file size (sanity check)
+        file_size = os.path.getsize(self.model_path)
+        if file_size < 1000:  # Less than 1KB is suspicious
+            raise ValueError(f"Model file too small ({file_size} bytes) - possibly corrupt")
+        
+        print(f"[WasteClassifier] Loading model: {self.model_path} ({file_size} bytes)")
+        
+        # CRITICAL: Add delay to ensure camera resources are fully initialized
+        # This prevents memory conflict segfaults between libcamera and TFLite
+        import time
+        import gc
+        print("[WasteClassifier] Waiting for camera resource stabilization...")
+        time.sleep(0.5)  # 500ms delay
+        gc.collect()  # Force garbage collection before heavy allocation
+        print("[WasteClassifier] Memory barrier cleared")
+        
         # Try tflite_runtime first (lighter, recommended for Raspberry Pi)
+        interpreter_loaded = False
+        last_error = None
+        
         try:
+            print("[WasteClassifier] Trying tflite_runtime...")
             import tflite_runtime.interpreter as tflite
+            
+            # Load interpreter (can segfault here!)
             self.interpreter = tflite.Interpreter(model_path=self.model_path)
-            print("[WasteClassifier] Using tflite_runtime")
+            interpreter_loaded = True
+            print("[WasteClassifier] ✓ Using tflite_runtime")
+            
         except (ImportError, AttributeError) as e:
-            # Fallback to TensorFlow Lite
+            print(f"[WasteClassifier] tflite_runtime not available: {e}")
+            last_error = e
+            
+        except Exception as e:
+            # Catch other errors (including potential pre-segfault exceptions)
+            print(f"[WasteClassifier] tflite_runtime failed: {e}")
+            last_error = e
+        
+        # Fallback to TensorFlow Lite
+        if not interpreter_loaded:
             try:
+                print("[WasteClassifier] Trying tensorflow.lite...")
                 import tensorflow as tf
+                
+                # Load interpreter (can also segfault!)
                 self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
-                print("[WasteClassifier] Using tensorflow.lite")
-            except (ImportError, AttributeError) as e2:
+                interpreter_loaded = True
+                print("[WasteClassifier] ✓ Using tensorflow.lite")
+                
+            except (ImportError, AttributeError) as e:
                 raise RuntimeError(
                     f"Cannot load TFLite interpreter. Install either:\n"
                     f"  1. tflite-runtime: sudo apt install python3-tflite-runtime\n"
                     f"  2. tensorflow: pip install tensorflow\n"
-                    f"Errors: tflite_runtime={e}, tensorflow={e2}"
+                    f"Previous errors: {last_error}, {e}"
                 )
+            except Exception as e:
+                raise RuntimeError(f"Failed to load model with tensorflow.lite: {e}")
         
-        self.interpreter.allocate_tensors()
+        if not interpreter_loaded:
+            raise RuntimeError("Failed to load interpreter with any available runtime")
+        
+        # Allocate tensors (CRITICAL: can segfault if model is corrupt!)
+        try:
+            print("[WasteClassifier] Allocating tensors...")
+            self.interpreter.allocate_tensors()
+            print("[WasteClassifier] ✓ Tensors allocated")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to allocate tensors (model may be corrupt): {e}\n"
+                f"Try re-downloading the model or using a different model file."
+            )
         
         # Get input dan output details
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
-        
-        # Get input shape (biasanya [1, height, width, channels])
-        self.input_shape = self.input_details[0]['shape']
-        print(f"[WasteClassifier] Model loaded successfully")
-        print(f"[WasteClassifier] Input shape: {self.input_shape}")
+        try:
+            self.input_details = self.interpreter.get_input_details()
+            self.output_details = self.interpreter.get_output_details()
+            
+            # Get input shape (biasanya [1, height, width, channels])
+            self.input_shape = self.input_details[0]['shape']
+            
+            print(f"[WasteClassifier] ✓ Model loaded successfully")
+            print(f"[WasteClassifier]   Input shape: {self.input_shape}")
+            print(f"[WasteClassifier]   Output shape: {self.output_details[0]['shape']}")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to get model details: {e}")
     
     def _load_labels(self):
         """Load labels dari file labels.txt."""

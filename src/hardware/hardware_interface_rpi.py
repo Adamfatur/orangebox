@@ -159,11 +159,20 @@ class HardwareInterface:
         print(f"[HardwareInterface] GPIO initialized (Proximity sensor: GPIO{self.PROXIMITY_SENSOR_PIN})")
     
     def _initialize_camera(self):
-        """Initialize Pi Camera atau fallback ke USB webcam."""
+        """
+        Initialize Pi Camera atau fallback ke USB webcam.
         
-        # Try Pi Camera first
-        if Picamera2 is not None:
+        CRITICAL: PiCamera2 can segfault on some systems.
+        Using OpenCV fallback for stability.
+        """
+        
+        # TEMPORARY FIX: Skip PiCamera2 to avoid segfault
+        # Use OpenCV for USB camera directly
+        use_opencv_only = True
+        
+        if not use_opencv_only and Picamera2 is not None:
             try:
+                print("[HardwareInterface] Trying PiCamera2...")
                 self.camera = Picamera2()
                 
                 # Configure camera
@@ -171,6 +180,9 @@ class HardwareInterface:
                     main={"size": (640, 480), "format": "RGB888"}
                 )
                 self.camera.configure(camera_config)
+                
+                # CRITICAL: Start can segfault!
+                print("[HardwareInterface] Starting camera...")
                 self.camera.start()
                 
                 # Warm up camera
@@ -179,25 +191,61 @@ class HardwareInterface:
                 print("[HardwareInterface] Pi Camera initialized (640x480)")
                 self.camera_type = "picamera"
                 return
+                
             except Exception as e:
-                print(f"[WARNING] Failed to initialize Pi Camera: {e}")
-                print("[INFO] Falling back to USB webcam...")
+                print(f"[WARNING] PiCamera2 failed: {e}")
+                print("[INFO] Falling back to OpenCV USB webcam...")
+                # Clean up failed picamera
+                try:
+                    if hasattr(self, 'camera') and self.camera:
+                        self.camera.close()
+                except:
+                    pass
+        else:
+            print("[HardwareInterface] Using OpenCV for USB camera (PiCamera2 disabled)")
         
-        # Fallback to OpenCV for USB webcam
+        # Use OpenCV for USB webcam (more stable)
         try:
             import cv2
-            self.camera = cv2.VideoCapture(self.camera_index)
+            
+            # Try camera index
+            cam_idx = self.camera_index if self.camera_index is not None else 0
+            
+            print(f"[HardwareInterface] Opening camera at index {cam_idx}...")
+            self.camera = cv2.VideoCapture(cam_idx)
             
             if not self.camera.isOpened():
-                raise RuntimeError(f"Cannot open camera {self.camera_index}")
+                # Try other indices
+                print(f"[HardwareInterface] Camera {cam_idx} failed, trying alternatives...")
+                for idx in range(0, 4):
+                    if idx == cam_idx:
+                        continue
+                    print(f"[HardwareInterface]   Trying index {idx}...")
+                    self.camera = cv2.VideoCapture(idx)
+                    if self.camera.isOpened():
+                        cam_idx = idx
+                        break
+                
+                if not self.camera.isOpened():
+                    raise RuntimeError(f"Cannot open any camera (tried 0-3)")
             
+            # Set resolution
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             
-            print(f"[HardwareInterface] USB Webcam initialized (index: {self.camera_index})")
+            # Test read
+            ret, test_frame = self.camera.read()
+            if not ret or test_frame is None:
+                raise RuntimeError(f"Camera opened but cannot read frames")
+            
+            print(f"[HardwareInterface] ✓ USB Webcam initialized (index: {cam_idx}, {test_frame.shape[1]}x{test_frame.shape[0]})")
             self.camera_type = "opencv"
+            
         except Exception as e:
             print(f"[ERROR] Failed to initialize camera: {e}")
+            print("[ERROR] System will run without camera!")
+            self.camera = None
+            self.camera_type = None
             raise
     
     def _initialize_servo(self):
