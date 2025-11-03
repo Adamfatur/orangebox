@@ -294,6 +294,24 @@ def main():
     except KeyboardInterrupt:
         print("\n\n🛑 Interrupted by user (Ctrl+C)")
         if 'hw' in locals():
+            print("[Cleanup] Stopping hardware...")
+            try:
+                # Emergency stop servos
+                if hasattr(hw, 'servo_motor') and hw.servo_motor is not None:
+                    print("[Cleanup] Stopping servo...")
+                    try:
+                        hw.servo_motor.angle = None  # Detach servo
+                    except:
+                        pass
+                if hasattr(hw, 'pca') and hw.pca is not None:
+                    print("[Cleanup] Disabling PCA9685...")
+                    try:
+                        hw.pca.deinit()
+                    except:
+                        pass
+            except Exception as e:
+                print(f"[Cleanup] Warning: {e}")
+            
             hw.cleanup()
         return 0
         
@@ -303,6 +321,26 @@ def main():
         traceback.print_exc()
         
         if 'hw' in locals():
+            print("\n[Emergency Cleanup] Stopping all hardware...")
+            try:
+                # Emergency stop servos
+                if hasattr(hw, 'servo_motor') and hw.servo_motor is not None:
+                    print("[Emergency] Stopping servo...")
+                    try:
+                        hw.servo_motor.angle = None  # Detach servo
+                    except:
+                        pass
+                if hasattr(hw, 'pca') and hw.pca is not None:
+                    print("[Emergency] Disabling PCA9685...")
+                    try:
+                        for ch in range(16):
+                            hw.pca.channels[ch].duty_cycle = 0
+                        hw.pca.deinit()
+                    except:
+                        pass
+            except Exception as cleanup_err:
+                print(f"[Emergency] Cleanup error: {cleanup_err}")
+            
             hw.cleanup()
         
         return 1

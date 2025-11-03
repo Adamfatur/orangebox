@@ -201,9 +201,16 @@ class HardwareInterface:
             raise
     
     def _initialize_servo(self):
-        """Initialize PCA9685 servo driver."""
+        """
+        Initialize PCA9685 servo driver.
+        
+        CRITICAL: Servo should NOT move during initialization!
+        Only prepare the driver, do NOT set any angles yet.
+        """
         if PCA9685 is None:
-            print("[ERROR] Adafruit PCA9685 library not available!")
+            print("[HardwareInterface] PCA9685 library not available - servo disabled")
+            self.servo_motor = None
+            self.pca = None
             return
         
         try:
@@ -214,21 +221,25 @@ class HardwareInterface:
             self.pca = PCA9685(i2c)
             self.pca.frequency = 50  # 50Hz untuk servo
             
-            # Initialize servo motor
+            # Initialize servo motor object (but do NOT move it yet!)
             self.servo_motor = servo.Servo(
                 self.pca.channels[self.SERVO_CHANNEL],
                 min_pulse=500,
                 max_pulse=2500
             )
             
-            # Set ke posisi netral
-            self.servo_motor.angle = self.SERVO_ANGLE_NEUTRAL
+            # CRITICAL: DO NOT set servo angle during init!
+            # Servo will move only when explicitly commanded by sorting logic
+            # Old buggy code: self.servo_motor.angle = self.SERVO_ANGLE_NEUTRAL  # ← REMOVED!
             
-            print(f"[HardwareInterface] Servo initialized (Channel {self.SERVO_CHANNEL}, Neutral: {self.SERVO_ANGLE_NEUTRAL}°)")
+            print(f"[HardwareInterface] Servo driver initialized (Channel {self.SERVO_CHANNEL})")
+            print(f"[HardwareInterface] ⚠️  Servo will move ONLY after classification")
         
         except Exception as e:
-            print(f"[ERROR] Failed to initialize servo: {e}")
-            raise
+            print(f"[HardwareInterface] Failed to initialize servo: {e}")
+            print(f"[HardwareInterface] Servo functionality disabled")
+            self.servo_motor = None
+            self.pca = None
     
     def check_trigger(self) -> bool:
         """
@@ -412,7 +423,9 @@ class HardwareInterface:
                       prediction: Optional[dict] = None):
         """
         Tampilkan frame kamera dengan overlay informasi sederhana menggunakan OpenCV.
-
+        
+        CRITICAL: Handle headless mode (SSH/no DISPLAY) gracefully.
+        
         Args:
             frame: Frame gambar (numpy array, BGR)
             text: Teks status utama
@@ -421,6 +434,20 @@ class HardwareInterface:
         try:
             if frame is None:
                 return
+            
+            # Check if we can display (not headless/SSH)
+            can_display = True
+            if os.environ.get('DISPLAY') is None or os.environ.get('DISPLAY') == '':
+                can_display = False
+            
+            if not can_display:
+                # Headless mode - just log status, no display
+                if prediction:
+                    print(f"[Camera] Status: {text} | Prediction: {prediction.get('label', 'N/A')} ({prediction.get('confidence', 0):.1%})")
+                else:
+                    print(f"[Camera] Status: {text}")
+                return
+            
             display = frame.copy()
             h, w = display.shape[:2]
             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -517,10 +544,25 @@ class HardwareInterface:
                     display = cv2.resize(display, (base_w, base_h), interpolation=cv2.INTER_LINEAR)
             except Exception:
                 pass
-            cv2.imshow(self.window_name, display)
-            cv2.waitKey(1)
-        except Exception:
+            
+            # Try to display frame
+            try:
+                cv2.imshow(self.window_name, display)
+                cv2.waitKey(1)
+            except cv2.error as e:
+                # Display failed (headless/SSH mode likely)
+                if 'DISPLAY' not in os.environ or os.environ.get('DISPLAY') == '':
+                    # Silent fail - headless mode
+                    pass
+                else:
+                    print(f"[WARNING] Display error (headless mode?): {e}")
+                    print(f"[INFO] Running in headless mode - camera feed disabled")
+                    # Set env to prevent further attempts
+                    os.environ['DISPLAY'] = ''
+                    
+        except Exception as e:
             # Jangan ganggu alur utama jika preview gagal
+            print(f"[WARNING] Display frame error: {e}")
             pass
 
     def cleanup(self):

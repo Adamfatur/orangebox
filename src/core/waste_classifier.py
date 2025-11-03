@@ -37,23 +37,27 @@ class WasteClassifier:
     
     def _load_model(self):
         """Load TensorFlow Lite model dan setup interpreter."""
-        try:
-            # Import TFLite runtime
-            import tflite_runtime.interpreter as tflite
-            use_tflite_runtime = True
-        except ImportError:
-            # Fallback to TensorFlow
-            import tensorflow as tf
-            use_tflite_runtime = False
-        
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model file tidak ditemukan: {self.model_path}")
         
-        # Inisialisasi interpreter
-        if use_tflite_runtime:
+        # Try tflite_runtime first (lighter, recommended for Raspberry Pi)
+        try:
+            import tflite_runtime.interpreter as tflite
             self.interpreter = tflite.Interpreter(model_path=self.model_path)
-        else:
-            self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
+            print("[WasteClassifier] Using tflite_runtime")
+        except (ImportError, AttributeError) as e:
+            # Fallback to TensorFlow Lite
+            try:
+                import tensorflow as tf
+                self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
+                print("[WasteClassifier] Using tensorflow.lite")
+            except (ImportError, AttributeError) as e2:
+                raise RuntimeError(
+                    f"Cannot load TFLite interpreter. Install either:\n"
+                    f"  1. tflite-runtime: sudo apt install python3-tflite-runtime\n"
+                    f"  2. tensorflow: pip install tensorflow\n"
+                    f"Errors: tflite_runtime={e}, tensorflow={e2}"
+                )
         
         self.interpreter.allocate_tensors()
         
