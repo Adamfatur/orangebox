@@ -366,46 +366,71 @@ class FiveServoHardware:
             print(f"[5ServoHW] Calibration to zero failed: {e}")
 
     def _sync_move(self, channels, angles):
-        """Gerakkan beberapa channel sekaligus ke target angles lalu detach (anti jitter)."""
+        """Gerakkan beberapa channel sekaligus ke target angles lalu detach (anti jitter).
+        
+        CRITICAL: Menulis PWM ke semua channel dalam satu loop ketat TANPA delay
+        untuk meminimalkan lag I2C. PCA9685 I2C bersifat serial, tapi kita kirim
+        semua perintah secepat mungkin agar servo mulai bergerak hampir bersamaan.
+        """
         if not HAS_SERVOKIT or self.kit is None:
             # Fallback: tidak ada ServoKit, abaikan
             return all(True for _ in channels)
         try:
-            # Opsi sinkronisasi ketat: set per-channel menggunakan thread untuk meminimalkan jeda per I2C call
-            tight_sync = bool(getattr(config, 'SERVO_TIGHT_SYNC', False))
-            if tight_sync:
-                errs = []
-                def _set_angle(ch, ang):
-                    try:
-                        self.kit.servo[ch].angle = ang
-                    except Exception as e:
-                        errs.append((ch, str(e)))
-                threads = []
-                for ch, ang in zip(channels, angles):
-                    t = threading.Thread(target=_set_angle, args=(ch, ang), daemon=True)
-                    threads.append(t)
-                    t.start()
-                for t in threads:
-                    t.join()
-                if errs:
-                    print(f"[5ServoHW] Tight-sync angle set errors: {errs}")
-            else:
-                # Default: set berurutan namun sangat cepat (nyaris serentak)
-                for ch, ang in zip(channels, angles):
-                    self.kit.servo[ch].angle = ang
+            # PRE-CALCULATE semua PWM values dulu (tidak ada I2C write)
+            pwm_values = []
+            for ch, ang in zip(channels, angles):
+                try:
+                    # Clamp angle
+                    ang = max(0, min(180, ang))
+                    # Convert angle to pulse width (ServoKit internal logic)
+                    # Formula: pulse_us = min_pulse + (angle / actuation_range) * (max_pulse - min_pulse)
+                    min_pulse = getattr(config, 'SERVOKIT_MIN_PULSE_MICROS', 500)
+                    max_pulse = getattr(config, 'SERVOKIT_MAX_PULSE_MICROS', 2500)
+                    actuation = getattr(config, 'SERVOKIT_ACTUATION_RANGE', 180)
+                    pulse_us = min_pulse + (ang / actuation) * (max_pulse - min_pulse)
+                    # Convert to 12-bit PWM value (0-4095) at 50Hz
+                    # PWM frequency = 50Hz → period = 20ms = 20000µs
+                    # duty = (pulse_us / 20000) * 4096
+                    freq = getattr(config, 'PCA9685_FREQUENCY', 50)
+                    period_us = 1_000_000 / freq
+                    duty = int((pulse_us / period_us) * 4096)
+                    pwm_values.append((ch, duty))
+                except Exception as e:
+                    print(f"[5ServoHW] PWM calc error CH{ch}: {e}")
+                    return False
+            
+            # BURST WRITE: Tulis semua channel PWM dalam loop ketat (minimal overhead)
+            # PCA9685 register: LEDn_ON_L/H (0x06+4n), LEDn_OFF_L/H (0x08+4n)
+            for ch, duty in pwm_values:
+                try:
+                    # ServoKit uses LEDn_OFF registers for PWM
+                    # We write via PCA9685 channels directly to minimize overhead
+                    # kit._pca.channels[ch] adalah PWMChannel object
+                    # Fastest way: set duty_cycle directly (16-bit value, tapi PCA9685 12-bit)
+                    # duty_cycle expects 0-65535, convert our 12-bit (0-4095) to 16-bit
+                    duty_16bit = duty << 4  # shift left 4 bits: 12-bit → 16-bit
+                    self.kit._pca.channels[ch].duty_cycle = duty_16bit
+                except Exception as e:
+                    print(f"[5ServoHW] Burst write error CH{ch}: {e}")
+            
+            # Tunggu gerakan selesai
             time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))
             hold = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
             if hold and hold > 0:
                 time.sleep(hold)
+            
+            # STOP PWM untuk anti-jitter
             if getattr(config, 'SERVO_STOP_JITTER', True):
                 for ch in channels:
                     try:
-                        self.kit.servo[ch].angle = None
+                        self.kit._pca.channels[ch].duty_cycle = 0
                     except Exception:
                         pass
             return True
         except Exception as e:
             print(f"[5ServoHW] Sync move failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def verify_positions(self):
