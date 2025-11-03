@@ -368,9 +368,10 @@ class FiveServoHardware:
     def _sync_move(self, channels, angles):
         """Gerakkan beberapa channel sekaligus ke target angles lalu detach (anti jitter).
         
-        CRITICAL: Menulis PWM ke semua channel dalam satu loop ketat TANPA delay
-        untuk meminimalkan lag I2C. PCA9685 I2C bersifat serial, tapi kita kirim
-        semua perintah secepat mungkin agar servo mulai bergerak hampir bersamaan.
+        CRITICAL: Menulis PWM dengan staggered start (delay kecil antar servo) untuk:
+        1. Mengurangi puncak arus (voltage drop yang menyebabkan inkonsistensi)
+        2. Tetap terlihat hampir bersamaan (delay total <50ms)
+        3. Lebih stabil di power supply yang terbatas
         """
         if not HAS_SERVOKIT or self.kit is None:
             # Fallback: tidak ada ServoKit, abaikan
@@ -399,19 +400,23 @@ class FiveServoHardware:
                     print(f"[5ServoHW] PWM calc error CH{ch}: {e}")
                     return False
             
-            # BURST WRITE: Tulis semua channel PWM dalam loop ketat (minimal overhead)
-            # PCA9685 register: LEDn_ON_L/H (0x06+4n), LEDn_OFF_L/H (0x08+4n)
-            for ch, duty in pwm_values:
+            # STAGGERED START: Tulis PWM dengan delay kecil untuk spread beban arus
+            # Delay per servo kecil (8-12ms) = total ~30-50ms untuk 4 servo
+            # Masih terlihat hampir bersamaan, tapi jauh lebih stabil
+            stagger_delay = getattr(config, 'SERVO_STAGGER_DELAY_MS', 10) / 1000.0  # default 10ms
+            
+            for idx, (ch, duty) in enumerate(pwm_values):
                 try:
-                    # ServoKit uses LEDn_OFF registers for PWM
-                    # We write via PCA9685 channels directly to minimize overhead
-                    # kit._pca.channels[ch] adalah PWMChannel object
-                    # Fastest way: set duty_cycle directly (16-bit value, tapi PCA9685 12-bit)
-                    # duty_cycle expects 0-65535, convert our 12-bit (0-4095) to 16-bit
-                    duty_16bit = duty << 4  # shift left 4 bits: 12-bit → 16-bit
+                    # Convert 12-bit duty (0-4095) to 16-bit (0-65535) untuk PCA9685
+                    duty_16bit = duty << 4  # shift left 4 bits
                     self.kit._pca.channels[ch].duty_cycle = duty_16bit
+                    
+                    # Stagger delay kecuali servo terakhir (agar tidak delay berlebihan)
+                    if idx < len(pwm_values) - 1 and stagger_delay > 0:
+                        time.sleep(stagger_delay)
                 except Exception as e:
-                    print(f"[5ServoHW] Burst write error CH{ch}: {e}")
+                    print(f"[5ServoHW] Stagger write error CH{ch}: {e}")
+                    # Lanjutkan ke servo berikutnya meski ada error
             
             # Tunggu gerakan selesai
             time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))

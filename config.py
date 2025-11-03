@@ -243,6 +243,12 @@ SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 # True  = buka semua (A+B+C+D) serentak
 SERVO_LAYER1_OPEN_BOTH_SIDES = True
 
+# Stagger delay (ms) antar servo saat gerak bersamaan untuk kurangi puncak arus
+# 0 = semua start bersamaan (butuh PSU kuat, mungkin inkonsisten)
+# 8-12 = staggered start, lebih stabil di PSU terbatas, masih terlihat hampir bersamaan
+# >20 = mulai terlihat berurutan
+SERVO_STAGGER_DELAY_MS = 10
+
 # ============================================
 # LAYER 2 - PEMILAH (1 Servo)
 # ============================================
