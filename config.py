@@ -147,8 +147,11 @@ KNOWN_OBJECT_HEIGHT_CM = 10.0
 # HARDWARE SETTINGS (Raspberry Pi)
 # ============================================
 
-# GPIO Pin untuk proximity sensor
-PROXIMITY_SENSOR_PIN = 17
+# Proximity Sensor Configuration
+# Set USE_PROXIMITY_SENSOR = False jika tidak menggunakan proximity sensor
+# atau jika terjadi error "Cannot determine SOC peripheral base address" di RPi 5
+USE_PROXIMITY_SENSOR = False  # Default: False (disable untuk RPi 5 compatibility)
+PROXIMITY_SENSOR_PIN = 17      # GPIO Pin untuk proximity sensor (jika enabled)
 
 # ============================================
 # SERVO CONFIGURATION (3 Servos MG996R)

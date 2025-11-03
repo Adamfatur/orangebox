@@ -68,8 +68,12 @@ class HardwareInterface:
         Args:
             camera_index: Index kamera (None = auto-detect, 0-4 untuk manual selection)
         """
+        # Import config
+        import config
+        
         # GPIO Pin Configuration
-        self.PROXIMITY_SENSOR_PIN = 17  # GPIO pin untuk proximity sensor (sesuaikan!)
+        self.USE_PROXIMITY_SENSOR = getattr(config, 'USE_PROXIMITY_SENSOR', False)
+        self.PROXIMITY_SENSOR_PIN = getattr(config, 'PROXIMITY_SENSOR_PIN', 17)
         
         # Servo Configuration
         self.SERVO_CHANNEL = 0  # Channel servo di PCA9685
@@ -144,19 +148,42 @@ class HardwareInterface:
 
     
     def _initialize_gpio(self):
-        """Initialize GPIO untuk proximity sensor."""
+        """
+        Initialize GPIO untuk proximity sensor.
+        
+        Note: Pada Raspberry Pi 5, RPi.GPIO mungkin belum fully supported.
+        Jika terjadi error "Cannot determine SOC peripheral base address",
+        set USE_PROXIMITY_SENSOR = False di config.py
+        """
         if GPIO is None:
-            print("[ERROR] RPi.GPIO not available!")
+            print("[HardwareInterface] ⚠️  RPi.GPIO not available (non-RPi system)")
             return
         
-        # Setup GPIO mode
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
+        if not self.USE_PROXIMITY_SENSOR:
+            print("[HardwareInterface] ℹ️  Proximity sensor disabled (USE_PROXIMITY_SENSOR=False)")
+            return
         
-        # Setup proximity sensor pin sebagai input dengan pull-down
-        GPIO.setup(self.PROXIMITY_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        try:
+            # Setup GPIO mode
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False)
+            
+            # Setup proximity sensor pin sebagai input dengan pull-down
+            GPIO.setup(self.PROXIMITY_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            
+            print(f"[HardwareInterface] GPIO initialized (Proximity sensor: GPIO{self.PROXIMITY_SENSOR_PIN})")
         
-        print(f"[HardwareInterface] GPIO initialized (Proximity sensor: GPIO{self.PROXIMITY_SENSOR_PIN})")
+        except RuntimeError as e:
+            # RPi.GPIO error pada Raspberry Pi 5 atau sistem tidak kompatibel
+            print(f"[HardwareInterface] ⚠️  GPIO initialization failed: {e}")
+            print("[HardwareInterface] ℹ️  Continuing without proximity sensor...")
+            print("[HardwareInterface] 💡 Set USE_PROXIMITY_SENSOR=False in config.py to suppress this warning")
+            self.USE_PROXIMITY_SENSOR = False  # Disable proximity sensor
+        
+        except Exception as e:
+            print(f"[HardwareInterface] ⚠️  Unexpected GPIO error: {e}")
+            print("[HardwareInterface] ℹ️  Continuing without proximity sensor...")
+            self.USE_PROXIMITY_SENSOR = False
     
     def _initialize_camera(self):
         """
@@ -295,9 +322,14 @@ class HardwareInterface:
         
         Returns:
             True jika sensor mendeteksi objek, False jika tidak
+            
+        Note: Jika proximity sensor disabled, selalu return False
         """
+        # Jika proximity sensor disabled, tidak pernah trigger
+        if not self.USE_PROXIMITY_SENSOR:
+            return False
+        
         if GPIO is None:
-            print("[ERROR] GPIO not available")
             return False
         
         # Implementasi cooldown
@@ -305,13 +337,18 @@ class HardwareInterface:
         if current_time - self.last_trigger_time < self.trigger_cooldown:
             return False
         
-        # Baca status sensor (HIGH = object detected)
-        sensor_state = GPIO.input(self.PROXIMITY_SENSOR_PIN)
+        try:
+            # Baca status sensor (HIGH = object detected)
+            sensor_state = GPIO.input(self.PROXIMITY_SENSOR_PIN)
+            
+            if sensor_state == GPIO.HIGH:
+                self.last_trigger_time = current_time
+                print("[HardwareInterface] ⚡ TRIGGER DETECTED (Proximity sensor)")
+                return True
         
-        if sensor_state == GPIO.HIGH:
-            self.last_trigger_time = current_time
-            print("[HardwareInterface] ⚡ TRIGGER DETECTED (Proximity sensor)")
-            return True
+        except Exception as e:
+            print(f"[HardwareInterface] ⚠️  Proximity sensor read error: {e}")
+            return False
         
         return False
     
@@ -640,8 +677,12 @@ class HardwareInterface:
                 pass
         
         # Cleanup GPIO
-        if GPIO is not None:
-            GPIO.cleanup()
+        if GPIO is not None and self.USE_PROXIMITY_SENSOR:
+            try:
+                GPIO.cleanup()
+            except Exception as e:
+                print(f"[HardwareInterface] ⚠️  GPIO cleanup warning: {e}")
+                pass
 
         # Close preview windows (if any)
         try:
