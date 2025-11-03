@@ -66,29 +66,30 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     .venv/bin/pip install --upgrade pip
     
     echo "Installing system packages for Raspberry Pi..."
-    # OpenCV via apt (faster, has native bindings)
-    sudo apt-get install -y python3-opencv
-    # Libcamera + Picamera2 support (Bookworm)
-    sudo apt-get install -y python3-picamera2 libcamera-apps
-    # TensorFlow Lite Runtime via apt (lighter, has wheels for Pi)
+    # TensorFlow Lite Runtime via apt (CRITICAL - no pip alternative on RPi)
     sudo apt-get install -y python3-tflite-runtime || true
+    # Libcamera + Picamera2 support (Bookworm)
+    sudo apt-get install -y python3-picamera2 libcamera-apps || true
     # Camera tooling
-    sudo apt-get install -y v4l-utils
+    sudo apt-get install -y v4l-utils || true
     # GPS support (gpsd) clients
-    sudo apt-get install -y gpsd gpsd-clients
+    sudo apt-get install -y gpsd gpsd-clients || true
     # I2C and SMBus tools for PCA9685/Adafruit Blinka
-    sudo apt-get install -y i2c-tools python3-smbus
+    sudo apt-get install -y i2c-tools python3-smbus || true
 
     echo "Installing Python packages for Raspberry Pi (in venv)..."
-    # Install TensorFlow Lite Runtime from apt (stable on Raspberry Pi)
-    echo "Installing tflite-runtime via apt..."
-    sudo apt-get install -y python3-tflite-runtime || true
-
-    # Core Python libs in venv (use pip inside venv; tflite-runtime comes from apt and is visible due to --system-site-packages)
+    # Core Python libs in venv
     .venv/bin/pip install --upgrade pip
-    .venv/bin/pip install numpy RPi.GPIO gpiozero pymysql pynmea2
-    # Adafruit PCA9685 + motor (optional; for I2C servo driver boards)
-    .venv/bin/pip install adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-motor
+    # Install numpy and opencv-python via pip (inside venv)
+    # This ensures consistent versions and avoids conflicts with system packages
+    .venv/bin/pip install numpy opencv-python
+    # GPIO and hardware libraries
+    .venv/bin/pip install RPi.GPIO gpiozero
+    # Database and GPS
+    .venv/bin/pip install pymysql pynmea2 pyserial python-dotenv
+    # Adafruit libraries for PCA9685 servo control
+    # Note: adafruit-circuitpython-servokit already includes motor functionality
+    .venv/bin/pip install adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-servokit
     
     echo "Verifying TFLite runtime availability..."
     if ! .venv/bin/python3 - << 'PY'
