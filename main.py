@@ -8,58 +8,72 @@ All rights reserved.
 
 import sys
 import os
+import argparse
+import subprocess
 
 # ==================================================================================
-# CRITICAL: Environment Sanity Check
-# Pastikan script ini dijalankan menggunakan virtual environment dari proyek.
+# CRITICAL: Auto-Fix Virtual Environment
+# Jika tidak di venv yang benar, otomatis re-launch dengan venv atau install dulu.
 # ==================================================================================
-def check_venv():
-    """Memeriksa apakah script dijalankan di dalam virtual environment yang benar."""
-    # Path ke executable python di venv
-    expected_python_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '.venv', 'bin', 'python'))
-    # Path python yang sedang berjalan
-    current_python_path = sys.executable
-    
-    # Di RPi, venv dengan --system-site-packages bisa jadi symlink ke python global,
-    # tapi VIRTUAL_ENV harusnya tetap ada.
-    virtual_env = os.environ.get('VIRTUAL_ENV')
+def check_and_fix_venv():
+    """
+    Memeriksa apakah script dijalankan di dalam virtual environment yang benar.
+    Jika tidak, akan OTOMATIS re-launch dengan venv atau jalankan install.sh.
+    """
     project_dir = os.path.abspath(os.path.dirname(__file__))
+    venv_python = os.path.join(project_dir, '.venv', 'bin', 'python3')
+    current_python = os.path.abspath(sys.executable)
     
-    if not virtual_env or not virtual_env.startswith(project_dir):
-        print("="*70)
-        print("❌ ERROR: Not running in the correct virtual environment!")
-        print("="*70)
-        print("Script ini harus dijalankan menggunakan interpreter dari virtual environment proyek.")
-        print(f" -> Direktori Proyek: {project_dir}")
-        print(f" -> Lingkungan Virtual yang Diharapkan (VIRTUAL_ENV): {os.path.join(project_dir, '.venv')}")
-        print(f" -> Lingkungan Virtual yang Aktif: {virtual_env or 'Tidak ada'}")
-        print("\nSilakan aktifkan virtual environment terlebih dahulu:")
-        print(f"  cd {project_dir}")
-        print("  source .venv/bin/activate")
-        print("\nLalu jalankan kembali script:")
-        print("  python3 main.py")
-        print("="*70)
-        sys.exit(1)
+    # Cek apakah current python adalah venv python
+    if current_python == venv_python or current_python.startswith(os.path.join(project_dir, '.venv')):
+        print("✅ Running in correct virtual environment.")
+        return
     
-    print("✅ Running in correct virtual environment.")
+    # Tidak di venv yang benar - coba auto-fix
+    print("⚠️  Not running in virtual environment. Auto-fixing...")
+    
+    # Cek apakah venv ada
+    if not os.path.exists(venv_python):
+        print("📦 Virtual environment not found. Running install.sh...")
+        install_script = os.path.join(project_dir, 'install.sh')
+        
+        if os.path.exists(install_script):
+            try:
+                subprocess.run(['bash', install_script], check=True, cwd=project_dir)
+            except subprocess.CalledProcessError as e:
+                print(f"❌ install.sh failed with code {e.returncode}")
+                sys.exit(1)
+        else:
+            print("="*70)
+            print("❌ ERROR: Virtual environment not found and install.sh missing!")
+            print("="*70)
+            print("Please run install.sh first:")
+            print(f"  cd {project_dir}")
+            print("  ./install.sh")
+            print("="*70)
+            sys.exit(1)
+    
+    # Re-launch dengan venv yang benar
+    print(f"🔄 Re-launching with virtual environment: {venv_python}")
+    print("")
+    
+    # Build command dengan semua arguments asli
+    cmd = [venv_python, os.path.abspath(__file__)] + sys.argv[1:]
+    
+    # Replace current process dengan venv version
+    os.execv(venv_python, cmd)
 
-check_venv()
+check_and_fix_venv()
 # ==================================================================================
+
+# Import dependencies after venv check
+from dotenv import load_dotenv
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 # Import config
 import config
-
-from core.waste_classifier import WasteClassifier
-from core.main_controller import MainController
-
-# Auto-select hardware interface based on config
-if config.PLATFORM == 'rpi':
-    from hardware.hardware_interface_rpi import HardwareInterface
-else:
-    from hardware.hardware_interface_mock import HardwareInterface
 
 
 def check_model_files():
@@ -107,6 +121,16 @@ def print_banner():
 def main():
     """Main function untuk menjalankan aplikasi."""
     
+    # Import dependencies inside main to catch any import errors
+    from core.waste_classifier import WasteClassifier
+    from core.main_controller import MainController
+    
+    # Auto-select hardware interface based on config
+    if config.PLATFORM == 'rpi':
+        from hardware.hardware_interface_rpi import HardwareInterface
+    else:
+        from hardware.hardware_interface_mock import HardwareInterface
+    
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Orange Box System - Intelligent Waste Classification')
     parser.add_argument('--test', action='store_true', 
@@ -151,13 +175,13 @@ def main():
     # Print banner
     print_banner()
     
+    # Initialize components
+    print("🔧 Initializing components...\n")
+    
+    # CRITICAL: Initialize camera FIRST (lightweight) before model (memory-intensive)
+    # This prevents memory conflict segfaults between libcamera and TFLite
+    
     try:
-        # Initialize components
-        print("🔧 Initializing components...\n")
-        
-        # CRITICAL: Initialize camera FIRST (lightweight) before model (memory-intensive)
-        # This prevents memory conflict segfaults between libcamera and TFLite
-        
         # Initialize hardware interface
         if args.camera is None:
             print(f"[1/3] Initializing Hardware Interface (Auto-detect camera)...")
@@ -169,6 +193,13 @@ def main():
         hw = HardwareInterface(camera_index=args.camera)
         print("      ✓ Hardware Interface initialized")
         print("      ✓ Camera locked and ready\n")
+    except Exception as e:
+        print(f"\n❌ Failed to initialize hardware interface: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+    
+    try:
         
         # Now safe to load TFLite model (camera already allocated)
         print("[2/3] Initializing Waste Classifier...")
@@ -345,75 +376,23 @@ def main():
         elif args.camera is not None:
             print(f"   Camera Index: {args.camera}")
         else:
-            print(f"   Camera: Auto-detected")
-        print(f"   Confidence Threshold: {args.confidence:.0%}")
-        if not args.test:
-            print(f"   Model: {args.model}")
-            print(f"   Labels: {classifier.labels}")
-        print()
-        
-        # Run system
-        print("🚀 Starting Orange Box System...")
-        print("   Press 't' to trigger sorting")
-        print("   Press 'q' to quit")
-        print()
-        
+            print(f"   Camera: Auto-detect")
+
+        print("\n🚀 Starting main application loop... Press 'q' in the camera window to exit.")
         controller.run()
-        
-        return 0
-        
+
     except KeyboardInterrupt:
-        print("\n\n🛑 Interrupted by user (Ctrl+C)")
-        if 'hw' in locals():
-            print("[Cleanup] Stopping hardware...")
-            try:
-                # Emergency stop servos
-                if hasattr(hw, 'servo_motor') and hw.servo_motor is not None:
-                    print("[Cleanup] Stopping servo...")
-                    try:
-                        hw.servo_motor.angle = None  # Detach servo
-                    except:
-                        pass
-                if hasattr(hw, 'pca') and hw.pca is not None:
-                    print("[Cleanup] Disabling PCA9685...")
-                    try:
-                        hw.pca.deinit()
-                    except:
-                        pass
-            except Exception as e:
-                print(f"[Cleanup] Warning: {e}")
-            
+        print("\n\n🛑 User interrupted. Shutting down gracefully...")
+        if 'hw' in locals() and hw:
             hw.cleanup()
+        print("Goodbye!")
         return 0
-        
     except Exception as e:
-        print(f"\n❌ FATAL ERROR: {e}")
+        print(f"\n❌ An unhandled error occurred during runtime: {e}")
         import traceback
         traceback.print_exc()
-        
-        if 'hw' in locals():
-            print("\n[Emergency Cleanup] Stopping all hardware...")
-            try:
-                # Emergency stop servos
-                if hasattr(hw, 'servo_motor') and hw.servo_motor is not None:
-                    print("[Emergency] Stopping servo...")
-                    try:
-                        hw.servo_motor.angle = None  # Detach servo
-                    except:
-                        pass
-                if hasattr(hw, 'pca') and hw.pca is not None:
-                    print("[Emergency] Disabling PCA9685...")
-                    try:
-                        for ch in range(16):
-                            hw.pca.channels[ch].duty_cycle = 0
-                        hw.pca.deinit()
-                    except:
-                        pass
-            except Exception as cleanup_err:
-                print(f"[Emergency] Cleanup error: {cleanup_err}")
-            
+        if 'hw' in locals() and hw:
             hw.cleanup()
-        
         return 1
 
 

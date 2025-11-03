@@ -67,3 +67,4 @@ logs/
 *~
 # Ignore external reference code folder
 all-code-main/
+.venv/
