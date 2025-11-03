@@ -56,9 +56,11 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     
     # Create and use virtual environment to avoid PEP 668 (externally-managed)
     echo "Setting up Python virtual environment (.venv)..."
-    # Create venv in project root (include system site-packages so apt libs visible)
+    # Ensure python3-venv is installed
+    sudo apt-get install -y python3-venv
+    # Create venv in project root WITH system-site-packages so apt Python modules are visible
     if [ ! -d ".venv" ]; then
-        python3 -m venv .venv --system-site-packages
+        python3 -m venv --system-site-packages .venv
     fi
     # Upgrade pip inside venv
     .venv/bin/pip install --upgrade pip
@@ -78,20 +80,30 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     sudo apt-get install -y i2c-tools python3-smbus
 
     echo "Installing Python packages for Raspberry Pi (in venv)..."
-    # Upgrade build tools in venv
-    .venv/bin/pip install --upgrade pip setuptools wheel
-    # Install project requirements into venv
-    # On Raspberry Pi, filter out packages provided by apt (opencv-python, tflite-runtime)
-    TMP_REQ=.requirements.rpi.txt
-    grep -Ev '^(opencv-python|tflite-runtime)' requirements.txt > "$TMP_REQ"
-    if ! .venv/bin/pip install -r "$TMP_REQ"; then
-        echo "⚠️  Some requirements failed; continuing with fallbacks where possible"
-    fi
-    rm -f "$TMP_REQ"
-    # Prefer TFLite runtime; fallback ke TensorFlow jika modul tidak tersedia
-    if ! .venv/bin/python3 -c "import tflite_runtime" 2>/dev/null; then
-        echo "⚠️  tflite-runtime tidak tersedia, memasang TensorFlow (mungkin berat)..."
-        .venv/bin/pip install tensorflow || true
+    # Install TensorFlow Lite Runtime from apt (stable on Raspberry Pi)
+    echo "Installing tflite-runtime via apt..."
+    sudo apt-get install -y python3-tflite-runtime || true
+
+    # Core Python libs in venv (use pip inside venv; tflite-runtime comes from apt and is visible due to --system-site-packages)
+    .venv/bin/pip install --upgrade pip
+    .venv/bin/pip install numpy RPi.GPIO gpiozero pymysql pynmea2
+    # Adafruit PCA9685 + motor (optional; for I2C servo driver boards)
+    .venv/bin/pip install adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-motor
+    
+    echo "Verifying TFLite runtime availability..."
+    if ! .venv/bin/python3 - << 'PY'
+try:
+    import tflite_runtime.interpreter as tflite
+    print('TFLITE_OK')
+except Exception as e:
+    import sys
+    sys.exit(2)
+PY
+    then
+        echo "⚠️  tflite-runtime not detected. TensorFlow (full) will NOT be installed to avoid segfaults."
+        echo "    Please ensure python3-tflite-runtime is available for your OS/arch, or run in --test mode."
+    else
+        echo "✅ tflite-runtime available"
     fi
 
     # Enable camera and GPIO/I2C/SPI (guarded with timeout to avoid hanging)
