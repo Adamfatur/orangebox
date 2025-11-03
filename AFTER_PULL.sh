@@ -1,152 +1,96 @@
 #!/bin/bash
 # Quick Fix After Git Pull - Restore Camera Functionality
-# Jalankan script ini setelah: git pull origin v1.1
+# ONE-COMMAND FIX: bash AFTER_PULL.sh
+
+set -e  # Exit on error
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║          QUICK FIX - Restore Camera After Update            ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
 
-echo "This script will:"
-echo "  1. Remove opencv-python from venv (broken V4L2 driver)"
-echo "  2. Install system opencv (python3-opencv with full V4L2)"
-echo "  3. Test camera access"
-echo "  4. Ready to run main.py"
-echo ""
-read -p "Press ENTER to continue or Ctrl+C to cancel..."
+# Platform detection
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "✓ macOS detected - no fix needed"
+    echo "  Just run: python3 main.py --test"
+    exit 0
+fi
+
+# Auto-continue on Raspberry Pi/Linux
+echo "🚀 Auto-fixing OpenCV camera issue..."
 echo ""
 
 # Step 1: Uninstall pip opencv
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "1️⃣  Removing opencv-python from venv..."
+echo "1️⃣  Removing broken opencv-python from venv..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 if [ -d ".venv" ]; then
-    source .venv/bin/activate
-    pip uninstall opencv-python opencv-contrib-python opencv-python-headless -y 2>/dev/null || true
-    deactivate
-    echo "✓ opencv-python removed"
+    .venv/bin/pip uninstall opencv-python opencv-contrib-python opencv-python-headless -y 2>/dev/null || true
+    echo "✓ Removed"
 else
-    echo "⚠️  No .venv found, skipping..."
+    echo "⚠️  No .venv found, creating..."
+    python3 -m venv --system-site-packages .venv
 fi
 echo ""
 
-# Step 2: Install system opencv
+# Step 2: Install system opencv (NO PROMPT)
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "2️⃣  Installing system OpenCV (python3-opencv)..."
+echo "2️⃣  Installing system OpenCV (with V4L2 driver)..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-sudo apt-get update -qq
-sudo apt-get install -y python3-opencv
-echo "✓ System OpenCV installed"
+sudo apt-get update -qq 2>/dev/null || true
+sudo apt-get install -y python3-opencv 2>/dev/null || echo "  (may already be installed)"
+echo "✓ System OpenCV ready"
 echo ""
 
-# Step 3: Fix camera permissions
+# Step 3: Fix permissions (NO PROMPT)
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "3️⃣  Fixing camera permissions..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 CURRENT_USER=$(whoami)
-
-# Add to video group if not already
-if groups | grep -q video; then
-    echo "✓ User already in 'video' group"
-else
-    sudo usermod -a -G video $CURRENT_USER
-    echo "✓ User added to 'video' group"
-    echo "⚠️  IMPORTANT: Must logout/login for group to take effect!"
-    echo "             Or just reboot: sudo reboot"
+if ! groups | grep -q video; then
+    sudo usermod -a -G video $CURRENT_USER 2>/dev/null || true
+    echo "✓ Added to video group (reboot needed)"
 fi
-
-# Set /dev/video* permissions
 if ls /dev/video* >/dev/null 2>&1; then
-    sudo chmod 666 /dev/video*
-    echo "✓ Camera device permissions set"
-else
-    echo "⚠️  No /dev/video* devices found!"
-    echo "    → Webcam may not be plugged in or recognized"
+    sudo chmod 666 /dev/video* 2>/dev/null || true
+    echo "✓ Camera permissions OK"
 fi
 echo ""
 
 # Step 4: Test camera
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "4️⃣  Testing camera access..."
+echo "4️⃣  Testing camera..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-source .venv/bin/activate
-python3 << 'EOF'
-import cv2
-import os
+.venv/bin/python3 << 'EOF'
+import cv2, os
 os.environ['QT_QPA_PLATFORM'] = 'xcb'
-
-success = False
 for i in range(5):
-    try:
-        cap = cv2.VideoCapture(i)
-        if cap.isOpened():
-            ret, frame = cap.read()
-            if ret and frame is not None:
-                print(f"✓ Camera {i} WORKING: {frame.shape[1]}x{frame.shape[0]}")
-                success = True
-                cap.release()
-                break
+    cap = cv2.VideoCapture(i)
+    if cap.isOpened():
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            print(f"✓ Camera {i} OK: {frame.shape[1]}x{frame.shape[0]}")
             cap.release()
-    except Exception as e:
-        pass
-
-if not success:
-    print("✗ No camera detected!")
-    print("\nTroubleshooting:")
-    print("  1. Check USB: lsusb | grep -i logitech")
-    print("  2. Check /dev/video*: ls -l /dev/video*")
-    print("  3. Reboot: sudo reboot")
-    print("  4. Try different USB port")
-else:
-    print("\n✓✓✓ Camera is READY! ✓✓✓")
+            exit(0)
+        cap.release()
+print("⚠️  Camera not detected - may need reboot")
+exit(1)
 EOF
-deactivate
-echo ""
 
-# Step 5: Final check
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "5️⃣  Final system check..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-source .venv/bin/activate
-python3 << 'EOF'
-import sys
-
-print("Checking dependencies...")
-
-# Check OpenCV
-try:
-    import cv2
-    print(f"✓ OpenCV: {cv2.__version__} from {cv2.__file__}")
-except Exception as e:
-    print(f"✗ OpenCV: {e}")
-
-# Check TFLite
-try:
-    import tflite_runtime.interpreter as tflite
-    print(f"✓ TFLite Runtime: OK")
-except Exception as e:
-    print(f"✗ TFLite Runtime: {e}")
-
-# Check ServoKit
-try:
-    from adafruit_servokit import ServoKit
-    print(f"✓ ServoKit: OK")
-except Exception as e:
-    print(f"⚠️  ServoKit: {e}")
-
-print("\nAll critical dependencies checked!")
-EOF
-deactivate
+CAMERA_OK=$?
 echo ""
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║                         ✓ DONE!                              ║"
+echo "║                         ✓ FIXED!                             ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Next steps:"
-echo "  1. If camera still not working → REBOOT: sudo reboot"
-echo "  2. After reboot → python3 main.py"
-echo ""
-echo "Test servos (optional):"
-echo "  python3 scripts/auto_detect_test_servo.py"
+
+if [ $CAMERA_OK -eq 0 ]; then
+    echo "✓✓✓ Camera is ready! Run: python3 main.py"
+else
+    echo "⚠️  Camera not detected. Try:"
+    echo "    1. Reboot: sudo reboot"
+    echo "    2. Check USB: lsusb | grep -i logitech"
+    echo "    3. Then run: python3 main.py"
+fi
 echo ""

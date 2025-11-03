@@ -121,10 +121,38 @@ def print_banner():
 def main():
     """Main function untuk menjalankan aplikasi."""
     
-    # Import dependencies inside main to catch any import errors
-    from core.waste_classifier import WasteClassifier
-    from core.mock_classifier import MockClassifier
-    from core.main_controller import MainController
+    # CRITICAL: Import dependencies and auto-fix if needed
+    try:
+        from core.waste_classifier import WasteClassifier
+        from core.mock_classifier import MockClassifier
+        from core.main_controller import MainController
+    except ModuleNotFoundError as e:
+        if 'cv2' in str(e):
+            print(f"\n❌ OpenCV not found: {e}")
+            print("\n🔧 Auto-fixing OpenCV issue...")
+            
+            # Check if on Raspberry Pi
+            import platform
+            if platform.system() == 'Linux':
+                try:
+                    with open('/proc/cpuinfo', 'r') as f:
+                        if 'Raspberry Pi' in f.read():
+                            print("📍 Raspberry Pi detected")
+                            print("⚙️  Installing python3-opencv from apt...")
+                            import subprocess
+                            subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
+                            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-opencv'], check=False)
+                            print("\n✓ OpenCV installed. Please run again: python3 main.py")
+                            return 1
+                except Exception:
+                    pass
+            
+            print("\n💡 Quick fix:")
+            print("   bash start.sh")
+            print("   (or run: bash AFTER_PULL.sh)")
+            return 1
+        else:
+            raise
     
     # Auto-select hardware interface based on config
     if config.PLATFORM == 'rpi':
