@@ -101,6 +101,11 @@ bash scripts/test_servo_servokit.sh
 bash scripts/test_gps.sh
 ```
 
+- Test 4 servo Layer-1 (dua servo per sisi) dengan PWM-off aman:
+```bash
+python3 scripts/test_servo_layer1_quad.py
+```
+
 ## 📦 Struktur Proyek (ringkas)
 
 - `main.py` — aplikasi utama
