@@ -18,7 +18,19 @@ fi
 
 echo "📦 Installing system packages..."
 sudo apt-get update --allow-releaseinfo-change -qq
-sudo apt-get install -y python3-opencv python3-picamera2 python3-tflite-runtime
+sudo apt-get install -y python3-opencv python3-picamera2 python3-tflite-runtime v4l-utils
+
+# Load USB camera driver
+echo "📹 Loading USB camera driver..."
+sudo modprobe uvcvideo || echo "⚠️ Could not load uvcvideo (may already be loaded)"
+
+# Add user to video group if not already
+if ! groups | grep -q video; then
+    echo "👤 Adding user to video group..."
+    sudo usermod -a -G video $USER
+    echo "⚠️  You need to LOGOUT and LOGIN again for group changes to take effect!"
+    echo "   After relogin, run this script again."
+fi
 
 echo "🔄 Recreating virtual environment with system packages..."
 # Backup old venv if exists
@@ -86,6 +98,42 @@ fi
 
 echo ""
 echo "✅ Virtual environment fixed!"
+echo ""
+
+# Check camera detection
+echo "🎥 Checking camera detection..."
+if ls /dev/video* >/dev/null 2>&1; then
+    echo "✓ Video devices found:"
+    ls -la /dev/video* 2>/dev/null | grep -E "video[0-9]+"
+    
+    # Try to detect with OpenCV
+    .venv/bin/python3 -c "
+import cv2
+found = False
+for i in range(6):
+    cap = cv2.VideoCapture(i)
+    if cap.isOpened():
+        ret, _ = cap.read()
+        if ret:
+            print(f'  ✓ Camera detected at index {i}')
+            found = True
+        cap.release()
+if not found:
+    print('  ⚠️ Video devices exist but not accessible via OpenCV')
+    print('  → Check permissions: groups | grep video')
+    print('  → Try: sudo usermod -a -G video \$USER, then logout/login')
+" 2>/dev/null || echo "  ⚠️ Could not test camera with OpenCV"
+else
+    echo "⚠️ No /dev/video* devices found"
+    echo ""
+    echo "Camera troubleshooting:"
+    echo "1. Reconnect camera to USB port"
+    echo "2. Run diagnostic: ./scripts/diagnose_camera.sh"
+    echo "3. Check if camera detected: lsusb | grep -i camera"
+    echo "4. Load driver: sudo modprobe uvcvideo"
+    echo "5. Reboot if needed: sudo reboot"
+fi
+
 echo ""
 echo "To activate venv manually:"
 echo "  source .venv/bin/activate"

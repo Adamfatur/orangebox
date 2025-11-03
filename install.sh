@@ -148,46 +148,101 @@ CAMERAS=()
 # Use appropriate Python based on platform
 if [[ "$PLATFORM" == "rpi" ]]; then
     PYTHON_CMD=".venv/bin/python3"
+    
+    # Verify OpenCV is available in venv
+    if ! $PYTHON_CMD -c "import cv2" 2>/dev/null; then
+        echo "⚠️  OpenCV not yet available in venv, using system Python for detection"
+        PYTHON_CMD="python3"
+    fi
 else
     PYTHON_CMD="python3"
 fi
 
+# Try OpenCV-based detection first
 for i in {0..5}; do
     if $PYTHON_CMD -c "import cv2; cap = cv2.VideoCapture($i); ret, _ = cap.read(); cap.release(); exit(0 if ret else 1)" 2>/dev/null; then
         CAMERAS+=($i)
     fi
 done
 
-if [ ${#CAMERAS[@]} -eq 0 ]; then
-    echo "❌ No cameras detected!"
-    echo "Please connect a camera and try again."
-    exit 1
+# Fallback: If no cameras found with OpenCV, try v4l2 on Raspberry Pi
+if [ ${#CAMERAS[@]} -eq 0 ] && [[ "$PLATFORM" == "rpi" ]]; then
+    echo "⚠️  OpenCV detection failed, trying v4l2 fallback..."
+    
+    # Check for video devices
+    if ls /dev/video* >/dev/null 2>&1; then
+        echo "✓ Video devices found:"
+        ls -la /dev/video* 2>/dev/null | grep -E "video[0-9]+" || true
+        
+        # Use v4l2-ctl to find actual capture devices
+        for device in /dev/video*; do
+            if v4l2-ctl --device="$device" --all 2>/dev/null | grep -q "Video Capture"; then
+                # Extract index from /dev/videoN
+                idx="${device##*/video}"
+                if [[ "$idx" =~ ^[0-9]+$ ]]; then
+                    CAMERAS+=($idx)
+                    echo "  → Found camera at index $idx ($device)"
+                fi
+            fi
+        done
+    fi
 fi
 
-echo "✅ Found cameras at index: ${CAMERAS[*]}"
-echo ""
-
-# Ask user to select camera
-if [ ${#CAMERAS[@]} -eq 1 ]; then
-    CAMERA_INDEX=${CAMERAS[0]}
-    echo "Using camera index: $CAMERA_INDEX"
-else
-    echo "Multiple cameras detected. Please select:"
-    for cam in "${CAMERAS[@]}"; do
-        echo "  $cam - Camera $cam"
-    done
+# If still no cameras, provide helpful troubleshooting
+if [ ${#CAMERAS[@]} -eq 0 ]; then
+    echo "❌ No cameras detected!"
+    echo ""
+    echo "Troubleshooting steps:"
+    echo "1. Check if camera is connected:"
+    echo "   lsusb | grep -i camera"
+    echo "   ls -la /dev/video*"
+    echo ""
+    echo "2. Try listing v4l2 devices:"
+    echo "   v4l2-ctl --list-devices"
+    echo ""
+    echo "3. Check camera permissions:"
+    echo "   groups \$USER | grep video"
+    echo "   If not in 'video' group, add with:"
+    echo "   sudo usermod -a -G video \$USER"
+    echo "   Then logout and login again"
+    echo ""
+    echo "4. For USB cameras, try:"
+    echo "   sudo modprobe uvcvideo"
+    echo ""
+    echo "5. Manual camera index selection:"
+    echo "   You can skip auto-detection and set CAMERA_INDEX manually in config.py"
     echo ""
     
-    while true; do
-        read -p "Enter camera index [${CAMERAS[0]}]: " CAMERA_INDEX
-        CAMERA_INDEX=${CAMERA_INDEX:-${CAMERAS[0]}}
+    # Don't exit, allow manual configuration
+    echo "⚠️  Continuing with default camera index 0"
+    echo "    You can change this later in config.py"
+    CAMERA_INDEX=0
+else
+    echo "✅ Found cameras at index: ${CAMERAS[*]}"
+    echo ""
+    
+    # Ask user to select camera
+    if [ ${#CAMERAS[@]} -eq 1 ]; then
+        CAMERA_INDEX=${CAMERAS[0]}
+        echo "Using camera index: $CAMERA_INDEX"
+    else
+        echo "Multiple cameras detected. Please select:"
+        for cam in "${CAMERAS[@]}"; do
+            echo "  $cam - Camera $cam"
+        done
+        echo ""
         
-        if [[ " ${CAMERAS[*]} " =~ " $CAMERA_INDEX " ]]; then
-            break
-        else
-            echo "❌ Invalid camera index. Please choose from: ${CAMERAS[*]}"
-        fi
-    done
+        while true; do
+            read -p "Enter camera index [${CAMERAS[0]}]: " CAMERA_INDEX
+            CAMERA_INDEX=${CAMERA_INDEX:-${CAMERAS[0]}}
+            
+            if [[ " ${CAMERAS[*]} " =~ " $CAMERA_INDEX " ]]; then
+                break
+            else
+                echo "❌ Invalid camera index. Please choose from: ${CAMERAS[*]}"
+            fi
+        done
+    fi
 fi
 
 echo ""
