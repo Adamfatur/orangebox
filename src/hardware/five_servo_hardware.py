@@ -1,3 +1,40 @@
+"""
+╔═══════════════════════════════════════════════════════════════╗
+║      5-Servo Hardware - Kontrol via Board PCA9685           ║
+║         (untuk sistem 5 servo pakai driver I2C)             ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📌 FILE INI UNTUK APA?
+   File ini mengontrol 5 servo yang terhubung ke board PCA9685 
+   (driver I2C yang bisa kontrol banyak servo sekaligus).
+
+⚙️  CARA SETTING SERVO:
+   ❌ JANGAN ubah file ini!
+   ✅ Buka config.py dan atur:
+      • SERVO_LAYER1_LEFT_CHANNEL = channel untuk pintu kiri
+      • SERVO_LAYER1_RIGHT_CHANNEL = channel untuk pintu kanan
+      • SERVO_LAYER2_SELECTOR_CHANNEL = channel untuk pemilah
+      • *_CLOSED, *_OPEN, *_BIN_A, *_BIN_B = derajat servo
+      
+   💡 Channel PCA9685 biasanya 0-15 (tergantung board)
+
+🧪 TEST SERVO:
+   python3 scripts/test_servo.py
+
+🔧 TROUBLESHOOTING:
+   • Servo gak gerak semua? → Cek board PCA9685 power & I2C connection
+   • Cek alamat I2C: i2cdetect -y 1 (harusnya ada 0x40)
+   • Satu servo gak gerak? → Cek channel number di config.py
+   • Arah kebalik? → Tukar nilai di config.py
+
+📚 CARA KERJA:
+   4 servo pintu (kiri A+B, kanan A+B) + 1 servo pemilah
+   Layer 2 gerak dulu → Layer 1 buka → Sampah jatuh → 
+   Pintu tutup → Pemilah balik tengah
+
+Copyright (c) 2025 AF - OrangeBox Project
+"""
+
 import time
 import sys
 import os
@@ -16,27 +53,6 @@ except Exception as e:
 
 
 class FiveServoHardware:
-    """
-    Pengelola hardware untuk 5 servo via PCA9685 menggunakan Adafruit ServoKit:
-    - Layer 1: Pintu kiri (A+B), pintu kanan (A+B) → total 4 servo
-    - Layer 2: Selector/bilah pengarah → 1 servo
-    Selaras dengan perilaku di all-code-main (gerak berbasis derajat, 50 Hz).
-
-    Panduan Pengembang (Ringkas):
-    - Edit sudut dan pemetaan channel di `config.py`:
-      * Layer 1 Kiri A/B: `SERVO_L1_LEFT_A_CH`, `SERVO_L1_LEFT_B_CH`
-        Sudut: `SERVO_LAYER1_LEFT_CLOSED` / `SERVO_LAYER1_LEFT_OPEN`,
-                `SERVO_LAYER1_LEFT2_CLOSED` / `SERVO_LAYER1_LEFT2_OPEN`
-      * Layer 1 Kanan A/B: `SERVO_L1_RIGHT_A_CH`, `SERVO_L1_RIGHT_B_CH`
-        Sudut: `SERVO_LAYER1_RIGHT_CLOSED` / `SERVO_LAYER1_RIGHT_OPEN`,
-                `SERVO_LAYER1_RIGHT2_CLOSED` / `SERVO_LAYER1_RIGHT2_OPEN`
-      * Layer 2 Selector: `SERVO_L2_SELECTOR_CH`,
-        Sudut: `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL`
-    - Alur gerak (execute_sort): set selector → pintu buka → geser → pintu tutup → selector netral.
-    - Arah terbalik? Tukar nilai BIN_A/B di `config.py` atau sesuaikan derajat ±.
-    - Pengaturan waktu di `config.py`: `SERVO_OPEN_DURATION`, `SERVO_DROP_DELAY`, `SERVO_FALL_TIME`,
-      `SERVO_SLIDE_TIME`, `SERVO_CLOSE_DELAY`, `SERVO_RESET_DELAY`, `SERVO_MOVEMENT_TIME`.
-    """
 
     def __init__(self):
         self.servos_active = False

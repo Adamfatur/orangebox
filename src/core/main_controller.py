@@ -190,13 +190,16 @@ class MainController:
                     port=getattr(config, 'DB_PORT', 3306)
                 )
                 
-                print(f"[MainController] Database service initialized")
+                print(f"[MainController] ✓ Database service initialized (statistics only, no GPS data)")
             except Exception as e:
-                print(f"[MainController] Warning: Could not initialize database service: {e}")
+                print(f"[MainController] ⚠️  Database initialization failed: {e}")
+                print(f"[MainController] ℹ️  Continuing without database logging...")
                 self.database_service = None
                 self.device_manager = None
                 self.device_id = None
                 self.enable_database = False
+        else:
+            print("[MainController] ℹ️  Database disabled (ENABLE_DATABASE=False in config.py)")
         
         print("[MainController] Initialized")
         print(f"[MainController] Confidence threshold: {self.confidence_threshold}")
@@ -672,23 +675,6 @@ class MainController:
         # Save to database
         if self.database_service:
             try:
-                # Get location only if GPS enabled
-                location = None
-                location_id = None
-                
-                if self.location_service:
-                    location = self.location_service.get_location()
-                    
-                    # Insert location first if available
-                    if location:
-                        location_id = self.database_service.insert_location(
-                            latitude=location['latitude'],
-                            longitude=location['longitude'],
-                            accuracy=location.get('accuracy'),
-                            device_id=self.device_id,
-                            source=location.get('source', 'unknown')
-                        )
-                
                 # Determine bin assignment
                 if label.upper() == 'ORGANIC':
                     bin_assignment = 'BIN A'
@@ -697,17 +683,19 @@ class MainController:
                     bin_assignment = 'BIN B'
                     bin_angle = 90
                 
-                # Insert analysis result (location fields will be NULL if GPS disabled)
+                # Insert analysis result WITHOUT location data
+                # Location fields (latitude, longitude, location_id) akan NULL
+                # Database tetap menyimpan: label, confidence, bin, timestamp, device_id
                 self.database_service.insert_analysis_result(
                     label=label,
                     confidence=confidence,
                     bin_assignment=bin_assignment,
                     bin_angle=bin_angle,
-                    latitude=location['latitude'] if location else None,
-                    longitude=location['longitude'] if location else None,
-                    location_accuracy=location.get('accuracy') if location else None,
+                    latitude=None,
+                    longitude=None,
+                    location_accuracy=None,
                     device_id=self.device_id,
-                    location_id=location_id
+                    location_id=None
                 )
             except Exception as e:
                 print(f"[MainController] ⚠️  Database insert failed: {e}")

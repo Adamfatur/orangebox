@@ -1,27 +1,38 @@
 """
-GPIO Servo Hardware Interface for Raspberry Pi
-Manages Layer 1 doors (left/right + optional pairs) and Layer 2 selector.
+╔═══════════════════════════════════════════════════════════════╗
+║         GPIO Servo Hardware - Kontrol Servo Langsung         ║
+║              (untuk sistem 3-4 servo pakai GPIO)             ║
+╚═══════════════════════════════════════════════════════════════╝
 
-System Design:
-- Layer 2: Selector tilts FIRST to target bin (±30° dari netral)
-- Layer 1: Pintu buka untuk menjatuhkan sampah → Sampah meluncur ke Bin A/B
-- Reset: Pintu tutup dan selector kembali ke netral (~90°)
+📌 FILE INI UNTUK APA?
+   File ini mengontrol servo yang langsung terhubung ke pin GPIO 
+   Raspberry Pi (TANPA board PCA9685).
+
+⚙️  CARA SETTING SERVO:
+   ❌ JANGAN ubah file ini!
+   ✅ Buka config.py dan atur:
+      • SERVO_LAYER1_LEFT_PIN = nomor pin GPIO kiri
+      • SERVO_LAYER1_RIGHT_PIN = nomor pin GPIO kanan
+      • SERVO_LAYER2_SELECTOR_PIN = nomor pin GPIO pemilah
+      • *_CLOSED, *_OPEN, *_BIN_A, *_BIN_B = derajat servo
+
+🧪 TEST SERVO (tanpa jalankan AI):
+   python3 src/hardware/gpio_servo_hardware.py
+   
+   Di Raspberry Pi: servo fisik akan bergerak
+   Di Mac/laptop: hanya simulasi (print ke layar)
+
+🔧 TROUBLESHOOTING:
+   • Servo gak gerak? → Cek kabel power 5V dan ground
+   • Arah kebalik? → Tukar nilai *_OPEN dengan *_CLOSED di config.py
+   • Gerak kasar? → Naikkan SERVO_MOVEMENT_TIME di config.py
+
+📚 CARA KERJA:
+   Layer 2 (Pemilah) gerak dulu → Layer 1 (Pintu) buka → 
+   Sampah jatuh → Pintu tutup → Pemilah balik ke tengah
 
 Copyright (c) 2025 AF - OrangeBox Project
-All rights reserved.
 """
-
-# PANDUAN SINGKAT EDIT GERAKAN SERVO
-# - Derajat & pin servo TIDAK diubah di file ini. Semua diatur dari `config.py`.
-# - Kalau pintu kebalik atau kurang jauh, ubah angka di:
-#   * Layer 1 Kiri  → SERVO_LAYER1_LEFT_CLOSED / SERVO_LAYER1_LEFT_OPEN
-#   * Layer 1 Kanan → SERVO_LAYER1_RIGHT_CLOSED / SERVO_LAYER1_RIGHT_OPEN
-#   * Layer 2      → SERVO_LAYER2_BIN_A / SERVO_LAYER2_BIN_B / SERVO_LAYER2_NEUTRAL
-# - Uji gerakan aman (tanpa AI):
-#   `python3 src/hardware/gpio_servo_hardware.py`
-#   Di Mac: simulasi (print). Di Raspberry Pi: servo fisik bergerak.
-# - Gerak terlalu kasar/bergetar? Kurangi langkah derajat atau aktifkan jeda lebih panjang
-#   via SERVO_MOVEMENT_TIME / SERVO_POSITION_HOLD_TIME di config.py.
 
 import time
 import sys

@@ -1,5 +1,25 @@
 """
-Configuration File - Ganti settings di sini
+╔═══════════════════════════════════════════════════════════════╗
+║                    ORANGEBOX - CONFIG FILE                    ║
+║                   Pengaturan Utama Sistem                     ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📋 FILE INI UNTUK APA?
+   Semua pengaturan sistem ada di sini. Ubah nilai di file ini, 
+   terus jalankan ulang program. Gampang!
+
+🎯 YANG PENTING DIATUR:
+   1. PLATFORM → 'mac' atau 'rpi' (baris ~22)
+   2. SERVO → Derajat & pin/channel (mulai baris ~160)
+   3. MODEL_PATH → Lokasi file model AI (baris ~40)
+
+⚙️  PENGATURAN SERVO ADA DI:
+   • Baris 160-230 → Setting pin, derajat, timing
+   • Penjelasan lengkap ada di setiap bagian
+
+🚀 CARA TEST:
+   • Test servo: python3 scripts/test_servo.py
+   • Lihat kamera: python3 main.py --test
 
 Copyright (c) 2025 AF - OrangeBox Project
 All rights reserved.
@@ -154,99 +174,107 @@ USE_PROXIMITY_SENSOR = False  # Default: False (disable untuk RPi 5 compatibilit
 PROXIMITY_SENSOR_PIN = 17      # GPIO Pin untuk proximity sensor (jika enabled)
 
 # ============================================
-# SERVO CONFIGURATION (3 Servos MG996R)
+# PENGATURAN SERVO - BACA INI DULU! 🔧
 # ============================================
 
-# DEVELOPER MAP (Servo):
-# - Edit angles & GPIO pins below; all code reads from config.py.
-# - GPIO flow: `src/hardware/gpio_servo_hardware.py`
-#   * Movement entrypoint: `execute_sort(bin_assignment, bin_angle)`
-#   * Doors: `open_doors()`, `close_doors()`
-#   * Selector: `set_selector(angle)`, `reset_to_ready()`
-# - ServoKit/PCA9685 flow (5 servos): `src/hardware/five_servo_hardware.py`
-#   * Movement entrypoint: `execute_sort(bin_assignment, bin_angle)`
-#   * Doors: `open_doors()`, `close_doors()`
-#   * Selector: `set_selector(angle)`, `reset_to_ready()`
-# - Timing knobs: see `SERVO_*` variables below; used directly by both hardware classes.
+# 📌 CARA SETTING SERVO (Simpel & Mudah):
+# 
+# 1️⃣ TENTUKAN JENIS SERVO KAMU:
+#    • Pakai GPIO langsung (3 servo) → Set SERVO_DRIVER = 'gpio'
+#    • Pakai board PCA9685 (5 servo) → Set SERVO_DRIVER = 'servokit'
+#
+# 2️⃣ ATUR PIN (untuk GPIO) atau CHANNEL (untuk PCA9685):
+#    Lihat bagian Layer 1 dan Layer 2 di bawah
+#
+# 3️⃣ ATUR DERAJAT SERVO:
+#    • Servo biasanya bergerak 0° sampai 180°
+#    • Mulai dari 90° (tengah), terus coba naik/turun 10-20°
+#    • Kalau arah terbalik, tukar angkanya
+#
+# 4️⃣ TEST GERAKAN:
+#    python3 scripts/test_servo.py
+#
+# ❓ MASALAH UMUM:
+#    • Servo berputar terus? → SERVO_STOP_JITTER harus True
+#    • Arah salah? → Tukar nilai OPEN/CLOSED atau BIN_A/BIN_B
+#    • Servo gak gerak? → Cek kabel power 5V dan ground
+#    • Gerakan patah-patah? → Kurangi SERVO_MOVEMENT_TIME
 
-# PETUNJUK CEPAT (SERVO)
-# - Kamu cukup ubah derajat/pin di sini. File lain membaca nilai dari config.py.
-# - Layer 1 (pintu wadah atas):
-#   * Kiri: `SERVO_LAYER1_LEFT_PIN`, `SERVO_LAYER1_LEFT_CLOSED`, `SERVO_LAYER1_LEFT_OPEN`
-#   * Kanan: `SERVO_LAYER1_RIGHT_PIN`, `SERVO_LAYER1_RIGHT_CLOSED`, `SERVO_LAYER1_RIGHT_OPEN`
-# - Layer 2 (selector ke Bin A/B): atur `SERVO_LAYER2_BIN_A`, `SERVO_LAYER2_BIN_B`, `SERVO_LAYER2_NEUTRAL`.
-# - Arah terbalik? Tukar nilai BIN_A dan BIN_B, atau geser ± beberapa derajat.
-# - Uji aman gerakan: `python3 src/hardware/gpio_servo_hardware.py` (simulasi di Mac, real di RPi).
-# - Pakai driver PCA9685? Lihat `src/hardware/hardware_interface_rpi.py` dan variabel `SERVO_CHANNEL` (legacy).
-# - Tips: mulai dari NEUTRAL=90°, buka pintu ±90°; sesuaikan kecil dulu (±5°).
+# Pilih driver servo (pilih salah satu):
+SERVO_DRIVER = 'servokit'   # 'servokit' = pakai PCA9685 (5 servo) | 'gpio' = langsung ke GPIO (3 servo)
 
-# Auto-detect servo hardware on Raspberry Pi
-# Set to True to enable auto-detection of MG996R servos
-AUTO_DETECT_SERVOS = False
+# ============================================
+# LAYER 1 - PINTU WADAH (2-4 Servo)
+# ============================================
+# Fungsi: Pintu kiri/kanan buat jatuhkan sampah ke bawah
 
-# Servo 1: Layer 1 - Wadah Kiri (Left Door)
-# Opens container to drop waste down to Layer 2
-SERVO_LAYER1_LEFT_PIN = 12      # GPIO PWM pin (BCM numbering)
-SERVO_LAYER1_LEFT_CLOSED = 0    # Angle when door is closed (horizontal)
-SERVO_LAYER1_LEFT_OPEN = 90     # Angle when door opens (vertical down)
+# 🚪 Pintu Kiri
+SERVO_LAYER1_LEFT_PIN = 12          # Pin GPIO (kalau pakai GPIO)
+SERVO_LAYER1_LEFT_CHANNEL = 2       # Channel PCA9685 (kalau pakai ServoKit)
+SERVO_LAYER1_LEFT_CLOSED = 0        # Derajat saat TUTUP (misal: 0° = horizontal)
+SERVO_LAYER1_LEFT_OPEN = 90         # Derajat saat BUKA (misal: 90° = vertikal ke bawah)
 
-# Servo 2: Layer 1 - Wadah Kanan (Right Door)
-# Opens container to drop waste down to Layer 2
-SERVO_LAYER1_RIGHT_PIN = 13     # GPIO PWM pin (BCM numbering)
-SERVO_LAYER1_RIGHT_CLOSED = 0   # Angle when door is closed (horizontal)
-SERVO_LAYER1_RIGHT_OPEN = 90    # Angle when door opens (vertical down)
+# 🚪 Pintu Kanan  
+SERVO_LAYER1_RIGHT_PIN = 13         # Pin GPIO (kalau pakai GPIO)
+SERVO_LAYER1_RIGHT_CHANNEL = 3      # Channel PCA9685 (kalau pakai ServoKit)
+SERVO_LAYER1_RIGHT_CLOSED = 0       # Derajat saat TUTUP
+SERVO_LAYER1_RIGHT_OPEN = 90        # Derajat saat BUKA
 
-# Optional: Layer 1 uses dual servos per side (total 4 servos)
-# If pins are set (not None), these paired servos will mirror the primary doors
-# Left side second servo
-SERVO_LAYER1_LEFT2_PIN = None           # e.g., 19 (BCM) or None to disable
+# 🚪 Pintu Tambahan (opsional, kalau pakai 4 servo untuk Layer 1)
+SERVO_LAYER1_LEFT2_PIN = None       # Set ke nomor pin (misal: 19) atau None untuk disable
+SERVO_LAYER1_LEFT2_CHANNEL = None   # Set ke nomor channel (misal: 4) atau None
 SERVO_LAYER1_LEFT2_CLOSED = SERVO_LAYER1_LEFT_CLOSED
 SERVO_LAYER1_LEFT2_OPEN = SERVO_LAYER1_LEFT_OPEN
 
-# Right side second servo
-SERVO_LAYER1_RIGHT2_PIN = None          # e.g., 26 (BCM) or None to disable
+SERVO_LAYER1_RIGHT2_PIN = None      # Set ke nomor pin (misal: 26) atau None untuk disable
+SERVO_LAYER1_RIGHT2_CHANNEL = None  # Set ke nomor channel (misal: 5) atau None
 SERVO_LAYER1_RIGHT2_CLOSED = SERVO_LAYER1_RIGHT_CLOSED
 SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 
-# Servo 3: Layer 2 - Pemilah Arah (Direction Selector)
-# Directs waste to Bin A (Organic) or Bin B (Anorganic)
-# Tilts 30° from center to route waste with gravity
-SERVO_LAYER2_SELECTOR_PIN = 18  # GPIO PWM pin (BCM numbering)
-SERVO_LAYER2_BIN_A = 60         # Angle for Bin A (90° - 30° = tilt 30° left)
-SERVO_LAYER2_BIN_B = 120        # Angle for Bin B (90° + 30° = tilt 30° right)
-SERVO_LAYER2_NEUTRAL = 90       # Neutral/center position (horizontal)
+# ============================================
+# LAYER 2 - PEMILAH (1 Servo)
+# ============================================
+# Fungsi: Arahkan sampah ke Bin A (Organik) atau Bin B (Anorganik)
 
-# Servo timing settings
-SERVO_OPEN_DURATION = 1.5       # How long Layer 1 doors stay open (seconds)
-SERVO_DROP_DELAY = 0.3          # Delay after Layer 2 positioned (wait for stabilization)
-SERVO_FALL_TIME = 0.5           # Time for waste to fall from Layer 1 to Layer 2
-SERVO_SLIDE_TIME = 0.5          # Time for waste to slide down selector to bin
-SERVO_CLOSE_DELAY = 0.3         # Delay after closing doors (safety)
-SERVO_RESET_DELAY = 0.3         # Delay after selector returns to neutral
+# 🎯 Servo Pemilah
+SERVO_LAYER2_SELECTOR_PIN = 18      # Pin GPIO (kalau pakai GPIO)
+SERVO_LAYER2_SELECTOR_CHANNEL = 0   # Channel PCA9685 (kalau pakai ServoKit)
+SERVO_LAYER2_BIN_A = 60             # Derajat untuk Bin A / Organik (misal: miring kiri 30°)
+SERVO_LAYER2_BIN_B = 120            # Derajat untuk Bin B / Anorganik (misal: miring kanan 30°)
+SERVO_LAYER2_NEUTRAL = 90           # Posisi netral/tengah (horizontal)
 
-# Servo movement control
-# CRITICAL: SERVO_STOP_JITTER HARUS True untuk mencegah servo berputar terus-menerus!
-SERVO_MOVEMENT_TIME = 0.15      # Time for servo to reach target angle (seconds)
-SERVO_STOP_JITTER = True        # ⚠️ PENTING: Set duty to 0 after movement (prevent continuous rotation)
-SERVO_PWM_FREQUENCY = 50        # PWM frequency (Hz) - standard for MG996R
-SERVO_POSITION_HOLD_TIME = 0.05 # Extra hold time to ensure mechanical lock (seconds)
-SERVO_POSITION_TOLERANCE = 2    # Acceptable position error in degrees (for verification)
+# ============================================
+# TIMING - Atur Kecepatan Gerakan
+# ============================================
+# Angka dalam DETIK - makin besar = makin lambat (tapi lebih aman)
 
-# Legacy settings (kept for backward compatibility)
-SERVO_CHANNEL = 0               # PCA9685 channel (if using PCA9685)
-SERVO_ANGLE_BIN_A = 0           # Bin A (Organic) - deprecated, use SERVO_LAYER2_BIN_A
-SERVO_ANGLE_BIN_B = 90          # Bin B (Anorganic) - deprecated, use SERVO_LAYER2_BIN_B
-SERVO_ANGLE_NEUTRAL = 45        # Neutral position - deprecated, use SERVO_LAYER2_NEUTRAL
+SERVO_OPEN_DURATION = 1.5       # Berapa lama pintu Layer 1 tetap terbuka
+SERVO_DROP_DELAY = 0.3          # Jeda setelah pemilah posisi (biar stabil dulu)
+SERVO_FALL_TIME = 0.5           # Waktu sampah jatuh dari Layer 1 ke Layer 2
+SERVO_SLIDE_TIME = 0.5          # Waktu sampah meluncur dari pemilah ke bin
+SERVO_CLOSE_DELAY = 0.3         # Jeda setelah pintu tutup (safety)
+SERVO_RESET_DELAY = 0.3         # Jeda setelah pemilah balik ke netral
+SERVO_MOVEMENT_TIME = 0.15      # Waktu servo sampai ke posisi target
 
-# =====================
-# PCA9685/ServoKit (5-Servo) Configuration
-# =====================
-# Enable ServoKit driver (PCA9685) for real servo movement aligned with all-code-main
-SERVO_DRIVER = 'servokit'   # Options: 'servokit' (PCA9685) or 'gpio' (RPi.GPIO)
+# ============================================
+# PENGATURAN TEKNIS (Jangan diubah kalau tidak yakin)
+# ============================================
 
-# PCA9685 I2C configuration
-PCA9685_I2C_ADDRESS = 0x40   # Default PCA9685 address
-PCA9685_FREQUENCY = 50       # Frequency in Hz (standard for MG996R)
+SERVO_STOP_JITTER = True        # ⚠️ HARUS True! Biar servo gak berputar terus
+SERVO_PWM_FREQUENCY = 50        # Frekuensi PWM (50Hz = standar servo MG996R)
+SERVO_POSITION_HOLD_TIME = 0.05 # Waktu tahan posisi biar kunci mekanis
+SERVO_POSITION_TOLERANCE = 2    # Toleransi error posisi (derajat)
+
+# PCA9685 Settings (kalau pakai ServoKit)
+PCA9685_I2C_ADDRESS = 0x40      # Alamat I2C board PCA9685 (biasanya 0x40)
+PCA9685_FREQUENCY = 50          # Sama dengan SERVO_PWM_FREQUENCY
+
+# Legacy (backward compatibility - abaikan aja)
+SERVO_CHANNEL = 0
+SERVO_ANGLE_BIN_A = 0
+SERVO_ANGLE_BIN_B = 90
+SERVO_ANGLE_NEUTRAL = 45
+AUTO_DETECT_SERVOS = False
 
 # PCA9685 channel mapping for 5-servo system
 # Layer 1 doors (two servos per side: A and B)
@@ -327,9 +355,10 @@ GPS_USE_GPSD = True                    # Use GPSD daemon (install: sudo apt-get 
 # ============================================
 
 # Enable database logging
-# Note: Database dapat menyimpan data tanpa GPS (location fields akan NULL)
-# GPS disabled tetap bisa logging ke database untuk analisis jumlah sampah
-ENABLE_DATABASE = False  # Default: False (disabled)
+# Database menyimpan statistik klasifikasi TANPA data lokasi/GPS
+# Location fields (latitude, longitude, location_id) akan selalu NULL
+# Berguna untuk: analisis jumlah sampah, confidence scores, timestamp, device tracking
+ENABLE_DATABASE = True  # Default: True (enabled untuk statistik)
 
 # MySQL RDS Configuration
 DB_HOST = 'orangebox.csxenzvznekp.ap-southeast-3.rds.amazonaws.com'
