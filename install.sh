@@ -80,9 +80,22 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     echo "Installing Python packages for Raspberry Pi (in venv)..."
     # Core Python libs in venv
     .venv/bin/pip install --upgrade pip
-    # Install numpy and opencv-python via pip (inside venv)
-    # This ensures consistent versions and avoids conflicts with system packages
-    .venv/bin/pip install numpy opencv-python
+    
+    # CRITICAL: DO NOT install opencv-python on Raspberry Pi!
+    # System opencv (python3-opencv from apt) has full V4L2 support for camera access
+    # Pip opencv-python is precompiled WITHOUT V4L2 support and will BREAK camera detection
+    # Install only numpy via pip
+    .venv/bin/pip install numpy
+    
+    # Verify system opencv is accessible via venv (--system-site-packages)
+    echo "Verifying system OpenCV accessibility..."
+    if .venv/bin/python3 -c "import cv2; print(f'OpenCV: {cv2.__version__} from {cv2.__file__}')" 2>/dev/null; then
+        echo "✅ System OpenCV accessible in venv"
+    else
+        echo "⚠️  System OpenCV not accessible - installing via apt..."
+        sudo apt-get install -y python3-opencv
+    fi
+    
     # GPIO and hardware libraries
     .venv/bin/pip install RPi.GPIO gpiozero
     # Database and GPS
