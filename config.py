@@ -203,6 +203,12 @@ PROXIMITY_SENSOR_PIN = 17      # GPIO Pin untuk proximity sensor (jika enabled)
 # Pilih driver servo (pilih salah satu):
 SERVO_DRIVER = 'servokit'   # 'servokit' = pakai PCA9685 (5 servo) | 'gpio' = langsung ke GPIO (3 servo)
 
+# Kalibrasi ServoKit (untuk MG996R/SG90 dsb.)
+# Jika servo berputar liar/nyaris 360°, lebarkan rentang pulsa atau sesuaikan sesuai spesifikasi.
+SERVOKIT_MIN_PULSE_MICROS = 500   # default aman 500µs
+SERVOKIT_MAX_PULSE_MICROS = 2500  # default aman 2500µs
+SERVOKIT_ACTUATION_RANGE = 180    # derajat total
+
 # ============================================
 # LAYER 1 - PINTU WADAH (2-4 Servo)
 # ============================================
@@ -231,6 +237,11 @@ SERVO_LAYER1_RIGHT2_PIN = 26        # Pin GPIO (kalau pakai GPIO) - Set ke None 
 SERVO_LAYER1_RIGHT2_CHANNEL = 3     # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
 SERVO_LAYER1_RIGHT2_CLOSED = SERVO_LAYER1_RIGHT_CLOSED
 SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
+
+# Sinkronisasi Layer 1: buka keempat pintu sekaligus (A+B+C+D) atau hanya sisi sesuai BIN
+# False = buka sesuai sisi (BIN A=LEFT → A+B; BIN B=RIGHT → C+D)
+# True  = buka semua (A+B+C+D) serentak
+SERVO_LAYER1_OPEN_BOTH_SIDES = False
 
 # ============================================
 # LAYER 2 - PEMILAH (1 Servo)

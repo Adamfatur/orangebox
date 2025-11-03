@@ -78,6 +78,9 @@ class FiveServoHardware:
             print(f"[5ServoHW] PCA9685 initialized at 0x{address:02X}, freq={getattr(config, 'PCA9685_FREQUENCY', 50)}Hz")
 
             self._setup_servos_config_only()
+            # Apply calibration and set all to closed (0°) safely
+            self._apply_servokit_calibration()
+            self._calibrate_to_zero()
             self.servos_active = True
         except Exception as e:
             print(f"[5ServoHW] Error initializing ServoKit: {e}")
@@ -304,6 +307,86 @@ class FiveServoHardware:
             cfg['last_move_time'] = time.time()
         return ok
 
+    def _apply_servokit_calibration(self):
+        """Kalibrasi ServoKit: set pulse width range dan actuation range untuk semua channel terpakai."""
+        if not HAS_SERVOKIT or self.kit is None:
+            return
+        min_p = int(getattr(config, 'SERVOKIT_MIN_PULSE_MICROS', 500))
+        max_p = int(getattr(config, 'SERVOKIT_MAX_PULSE_MICROS', 2500))
+        act_range = int(getattr(config, 'SERVOKIT_ACTUATION_RANGE', 180))
+        try:
+            used_channels = []
+            for sid, cfg in self.servos.items():
+                ch = cfg.get('channel')
+                if ch is None or ch in used_channels:
+                    continue
+                try:
+                    self.kit.servo[ch].actuation_range = act_range
+                    self.kit.servo[ch].set_pulse_width_range(min_p, max_p)
+                    used_channels.append(ch)
+                except Exception as e:
+                    print(f"[5ServoHW] Calibration warning (CH{ch}): {e}")
+            print(f"[5ServoHW] Calibration applied: actuation={act_range}°, pulse=[{min_p},{max_p}]µs")
+        except Exception as e:
+            print(f"[5ServoHW] Calibration error: {e}")
+
+    def _calibrate_to_zero(self):
+        """Pastikan semua servo di posisi 0° (closed) pada startup dan detach PWM untuk hindari putaran liar."""
+        if not HAS_SERVOKIT or self.kit is None:
+            return
+        try:
+            channels = []
+            targets = []
+            for sid, cfg in self.servos.items():
+                ch = cfg.get('channel')
+                if ch is None:
+                    continue
+                channels.append(ch)
+                targets.append(cfg.get('closed', 0))
+            # Set semua target sekaligus
+            for ch, ang in zip(channels, targets):
+                try:
+                    self.kit.servo[ch].angle = ang
+                except Exception as e:
+                    print(f"[5ServoHW] Zero-set warning (CH{ch}): {e}")
+            # Tunggu gerak selesai, hold sebentar, lalu detach untuk anti jitter
+            time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))
+            hold = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
+            if hold and hold > 0:
+                time.sleep(hold)
+            if getattr(config, 'SERVO_STOP_JITTER', True):
+                for ch in channels:
+                    try:
+                        self.kit.servo[ch].angle = None
+                    except Exception:
+                        pass
+            print("[5ServoHW] ✓ Startup calibration: all servos set to 0° (closed)")
+        except Exception as e:
+            print(f"[5ServoHW] Calibration to zero failed: {e}")
+
+    def _sync_move(self, channels, angles):
+        """Gerakkan beberapa channel sekaligus ke target angles lalu detach (anti jitter)."""
+        if not HAS_SERVOKIT or self.kit is None:
+            # Fallback: tidak ada ServoKit, abaikan
+            return all(True for _ in channels)
+        try:
+            for ch, ang in zip(channels, angles):
+                self.kit.servo[ch].angle = ang
+            time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))
+            hold = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
+            if hold and hold > 0:
+                time.sleep(hold)
+            if getattr(config, 'SERVO_STOP_JITTER', True):
+                for ch in channels:
+                    try:
+                        self.kit.servo[ch].angle = None
+                    except Exception:
+                        pass
+            return True
+        except Exception as e:
+            print(f"[5ServoHW] Sync move failed: {e}")
+            return False
+
     def verify_positions(self):
         """Verifikasi sederhana; mengembalikan sudut yang diharapkan dan timestamp."""
         status = {}
@@ -336,30 +419,15 @@ class FiveServoHardware:
             return False
         pair = ('layer1_left', 'layer1_left2') if side == 'left' else ('layer1_right', 'layer1_right2')
         print(f"[5ServoHW] Opening Layer 1 doors ({side.upper()} pair: {pair[0]}, {pair[1]})...")
-        # Jika ServoKit aktif, gerakkan kedua channel secara sinkron
+        # Jika ServoKit aktif, gerakkan kedua channel secara sinkron 0->open (90) saja;
+        # penutupan kembali ke 0° dilakukan terpisah oleh close_side/close_all
         results = []
         if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
             try:
                 targets = [self.servos[s]['open'] for s in pair]
                 channels = [self.servos[s]['channel'] for s in pair]
-                # Set target untuk kedua servo dulu
-                for ch, ang in zip(channels, targets):
-                    self.kit.servo[ch].angle = ang
-                # Tunggu gerakan selesai
-                movement_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
-                time.sleep(movement_time)
-                # Hold
-                hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
-                if hold_time and hold_time > 0:
-                    time.sleep(hold_time)
-                # Detach keduanya untuk hilangkan jitter
-                if getattr(config, 'SERVO_STOP_JITTER', True):
-                    for ch in channels:
-                        try:
-                            self.kit.servo[ch].angle = None
-                        except Exception:
-                            pass
-                results = [True, True]
+                ok = self._sync_move(channels, targets)
+                results = [ok, ok]
             except Exception as e:
                 print(f"[5ServoHW] Sync move ({side}) failed: {e}")
                 # Fallback ke per-servo
@@ -396,20 +464,8 @@ class FiveServoHardware:
             try:
                 targets = [self.servos[s]['closed'] for s in pair]
                 channels = [self.servos[s]['channel'] for s in pair]
-                for ch, ang in zip(channels, targets):
-                    self.kit.servo[ch].angle = ang
-                movement_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
-                time.sleep(movement_time)
-                hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
-                if hold_time and hold_time > 0:
-                    time.sleep(hold_time)
-                if getattr(config, 'SERVO_STOP_JITTER', True):
-                    for ch in channels:
-                        try:
-                            self.kit.servo[ch].angle = None
-                        except Exception:
-                            pass
-                results = [True, True]
+                ok = self._sync_move(channels, targets)
+                results = [ok, ok]
             except Exception as e:
                 print(f"[5ServoHW] Sync close ({side}) failed: {e}")
                 for sid in pair:
@@ -425,6 +481,53 @@ class FiveServoHardware:
         else:
             print(f"[5ServoHW] ⚠ {side.upper()} door close issue: {results}")
         return all_ok
+
+    def open_all_sync(self):
+        """Buka keempat servo Layer 1 secara bersamaan (0°→open)."""
+        pair = []
+        for sid in ('layer1_left', 'layer1_left2', 'layer1_right', 'layer1_right2'):
+            if sid in self.servos:
+                pair.append(sid)
+        if not pair:
+            return False
+        print("[5ServoHW] Opening ALL doors in sync...")
+        if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
+            channels = [self.servos[s]['channel'] for s in pair]
+            targets = [self.servos[s]['open'] for s in pair]
+            ok = self._sync_move(channels, targets)
+            if ok:
+                time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
+                print("[5ServoHW] ✓ ALL doors opened")
+            return ok
+        # Fallback per-servo
+        results = [self._move_servo(s, self.servos[s]['open']) for s in pair]
+        ok = all(results)
+        if ok:
+            time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
+            print("[5ServoHW] ✓ ALL doors opened")
+        return ok
+
+    def close_all_sync(self):
+        """Tutup keempat servo Layer 1 secara bersamaan (open→0°)."""
+        pair = []
+        for sid in ('layer1_left', 'layer1_left2', 'layer1_right', 'layer1_right2'):
+            if sid in self.servos:
+                pair.append(sid)
+        if not pair:
+            return False
+        print("[5ServoHW] Closing ALL doors in sync...")
+        if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
+            channels = [self.servos[s]['channel'] for s in pair]
+            targets = [self.servos[s]['closed'] for s in pair]
+            ok = self._sync_move(channels, targets)
+            if ok:
+                print("[5ServoHW] ✓ ALL doors closed")
+            return ok
+        results = [self._move_servo(s, self.servos[s]['closed']) for s in pair]
+        ok = all(results)
+        if ok:
+            print("[5ServoHW] ✓ ALL doors closed")
+        return ok
 
     def set_selector(self, angle):
         # Sudut selector didefinisikan di config.py → SERVO_LAYER2_BIN_A/B/NEUTRAL
@@ -485,10 +588,16 @@ class FiveServoHardware:
             print(f"[5ServoHW] ✓ Selector locked at {bin_angle}°")
             
             # Phase 2: Open Layer 1 doors - CRITICAL: WAIT FOR COMPLETE STOP
-            # Tentukan sisi pintu berdasarkan bin (BIN A=LEFT, BIN B=RIGHT)
-            door_side = 'left' if str(bin_assignment).strip().upper() == 'BIN A' else 'right'
-            print(f"[5ServoHW] PHASE 2 - Opening {door_side.upper()} doors...")
-            if not self.open_side(door_side):
+            both_sides = getattr(config, 'SERVO_LAYER1_OPEN_BOTH_SIDES', False)
+            if both_sides:
+                print(f"[5ServoHW] PHASE 2 - Opening ALL doors (sync)...")
+                ok_open = self.open_all_sync()
+            else:
+                # Tentukan sisi pintu berdasarkan bin (BIN A=LEFT, BIN B=RIGHT)
+                door_side = 'left' if str(bin_assignment).strip().upper() == 'BIN A' else 'right'
+                print(f"[5ServoHW] PHASE 2 - Opening {door_side.upper()} doors...")
+                ok_open = self.open_side(door_side)
+            if not ok_open:
                 print("[5ServoHW] ✗ ABORT: Door open failed")
                 return False
             print(f"[5ServoHW] ✓ Doors fully open and stopped")
@@ -500,8 +609,13 @@ class FiveServoHardware:
             print(f"[5ServoHW] ✓ Waste routed to {bin_assignment}")
             
             # Phase 4: Close doors and reset selector - CRITICAL: SEQUENTIAL STOP
-            print(f"[5ServoHW] PHASE 4 - Closing {door_side.upper()} doors...")
-            if not self.close_side(door_side):
+            if both_sides:
+                print(f"[5ServoHW] PHASE 4 - Closing ALL doors (sync)...")
+                ok_close = self.close_all_sync()
+            else:
+                print(f"[5ServoHW] PHASE 4 - Closing {door_side.upper()} doors...")
+                ok_close = self.close_side(door_side)
+            if not ok_close:
                 print("[5ServoHW] ✗ WARNING: Door close failed (attempting recovery)")
             
             # Extra safety delay setelah pintu tutup
