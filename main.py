@@ -6,9 +6,45 @@ Copyright (c) 2025 AF - OrangeBox Project
 All rights reserved.
 """
 
-import os
 import sys
-import argparse
+import os
+
+# ==================================================================================
+# CRITICAL: Environment Sanity Check
+# Pastikan script ini dijalankan menggunakan virtual environment dari proyek.
+# ==================================================================================
+def check_venv():
+    """Memeriksa apakah script dijalankan di dalam virtual environment yang benar."""
+    # Path ke executable python di venv
+    expected_python_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '.venv', 'bin', 'python'))
+    # Path python yang sedang berjalan
+    current_python_path = sys.executable
+    
+    # Di RPi, venv dengan --system-site-packages bisa jadi symlink ke python global,
+    # tapi VIRTUAL_ENV harusnya tetap ada.
+    virtual_env = os.environ.get('VIRTUAL_ENV')
+    project_dir = os.path.abspath(os.path.dirname(__file__))
+    
+    if not virtual_env or not virtual_env.startswith(project_dir):
+        print("="*70)
+        print("❌ ERROR: Not running in the correct virtual environment!")
+        print("="*70)
+        print("Script ini harus dijalankan menggunakan interpreter dari virtual environment proyek.")
+        print(f" -> Direktori Proyek: {project_dir}")
+        print(f" -> Lingkungan Virtual yang Diharapkan (VIRTUAL_ENV): {os.path.join(project_dir, '.venv')}")
+        print(f" -> Lingkungan Virtual yang Aktif: {virtual_env or 'Tidak ada'}")
+        print("\nSilakan aktifkan virtual environment terlebih dahulu:")
+        print(f"  cd {project_dir}")
+        print("  source .venv/bin/activate")
+        print("\nLalu jalankan kembali script:")
+        print("  python3 main.py")
+        print("="*70)
+        sys.exit(1)
+    
+    print("✅ Running in correct virtual environment.")
+
+check_venv()
+# ==================================================================================
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
