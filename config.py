@@ -221,13 +221,14 @@ SERVO_LAYER1_RIGHT_CLOSED = 0       # Derajat saat TUTUP
 SERVO_LAYER1_RIGHT_OPEN = 90        # Derajat saat BUKA
 
 # 🚪 Pintu Tambahan (opsional, kalau pakai 4 servo untuk Layer 1)
-SERVO_LAYER1_LEFT2_PIN = None       # Set ke nomor pin (misal: 19) atau None untuk disable
-SERVO_LAYER1_LEFT2_CHANNEL = None   # Set ke nomor channel (misal: 4) atau None
+# User punya 4 servo Layer 1 → Aktifkan dengan set channel/pin
+SERVO_LAYER1_LEFT2_PIN = 19         # Pin GPIO (kalau pakai GPIO) - Set ke None untuk disable
+SERVO_LAYER1_LEFT2_CHANNEL = 4      # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
 SERVO_LAYER1_LEFT2_CLOSED = SERVO_LAYER1_LEFT_CLOSED
 SERVO_LAYER1_LEFT2_OPEN = SERVO_LAYER1_LEFT_OPEN
 
-SERVO_LAYER1_RIGHT2_PIN = None      # Set ke nomor pin (misal: 26) atau None untuk disable
-SERVO_LAYER1_RIGHT2_CHANNEL = None  # Set ke nomor channel (misal: 5) atau None
+SERVO_LAYER1_RIGHT2_PIN = 26        # Pin GPIO (kalau pakai GPIO) - Set ke None untuk disable
+SERVO_LAYER1_RIGHT2_CHANNEL = 5     # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
 SERVO_LAYER1_RIGHT2_CLOSED = SERVO_LAYER1_RIGHT_CLOSED
 SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 

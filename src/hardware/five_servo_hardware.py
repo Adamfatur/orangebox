@@ -88,47 +88,56 @@ class FiveServoHardware:
     def _setup_servos_config_only(self):
         """Muat konfigurasi servo dari config (berfungsi juga untuk simulasi).
         Tempat edit:
-        - Channel: `SERVO_L1_*_CH`, `SERVO_L2_SELECTOR_CH` di config.py
+        - Channel: `SERVO_LAYER1_*_CHANNEL`, `SERVO_LAYER2_SELECTOR_CHANNEL` di config.py
         - Sudut: Layer 1 tutup/buka; Layer 2 netral/bin di config.py
         """
         self.servos = {}
 
-        # Layer 1 - Left door (A + optional B)
-        left_a_ch = getattr(config, 'SERVO_L1_LEFT_A_CH', None)
-        left_b_ch = getattr(config, 'SERVO_L1_LEFT_B_CH', None)
-        right_a_ch = getattr(config, 'SERVO_L1_RIGHT_A_CH', None)
-        right_b_ch = getattr(config, 'SERVO_L1_RIGHT_B_CH', None)
-        sel_ch = getattr(config, 'SERVO_L2_SELECTOR_CH', None)
+        # Layer 1 - 4 Servo Pintu (left, right, left2, right2)
+        # Ambil channel dari config.py
+        left_ch = getattr(config, 'SERVO_LAYER1_LEFT_CHANNEL', None)
+        right_ch = getattr(config, 'SERVO_LAYER1_RIGHT_CHANNEL', None)
+        left2_ch = getattr(config, 'SERVO_LAYER1_LEFT2_CHANNEL', None)
+        right2_ch = getattr(config, 'SERVO_LAYER1_RIGHT2_CHANNEL', None)
+        sel_ch = getattr(config, 'SERVO_LAYER2_SELECTOR_CHANNEL', None)
 
-        if left_a_ch is not None:
-            self.servos['layer1_left_a'] = {
-                'name': 'Layer 1 Left A',
-                'channel': left_a_ch,
+        # Setup servo LEFT (primary)
+        if left_ch is not None:
+            self.servos['layer1_left'] = {
+                'name': 'Layer 1 Left Door',
+                'channel': left_ch,
                 'closed': getattr(config, 'SERVO_LAYER1_LEFT_CLOSED', 0),
                 'open': getattr(config, 'SERVO_LAYER1_LEFT_OPEN', 90)
             }
-        if left_b_ch is not None:
-            self.servos['layer1_left_b'] = {
-                'name': 'Layer 1 Left B',
-                'channel': left_b_ch,
-                'closed': getattr(config, 'SERVO_LAYER1_LEFT2_CLOSED', getattr(config, 'SERVO_LAYER1_LEFT_CLOSED', 0)),
-                'open': getattr(config, 'SERVO_LAYER1_LEFT2_OPEN', getattr(config, 'SERVO_LAYER1_LEFT_OPEN', 90))
-            }
-        if right_a_ch is not None:
-            self.servos['layer1_right_a'] = {
-                'name': 'Layer 1 Right A',
-                'channel': right_a_ch,
+        
+        # Setup servo RIGHT (primary)
+        if right_ch is not None:
+            self.servos['layer1_right'] = {
+                'name': 'Layer 1 Right Door',
+                'channel': right_ch,
                 'closed': getattr(config, 'SERVO_LAYER1_RIGHT_CLOSED', 0),
                 'open': getattr(config, 'SERVO_LAYER1_RIGHT_OPEN', 90)
             }
-        if right_b_ch is not None:
-            self.servos['layer1_right_b'] = {
-                'name': 'Layer 1 Right B',
-                'channel': right_b_ch,
+        
+        # Setup servo LEFT2 (secondary pair) - BARU!
+        if left2_ch is not None:
+            self.servos['layer1_left2'] = {
+                'name': 'Layer 1 Left Door 2',
+                'channel': left2_ch,
+                'closed': getattr(config, 'SERVO_LAYER1_LEFT2_CLOSED', getattr(config, 'SERVO_LAYER1_LEFT_CLOSED', 0)),
+                'open': getattr(config, 'SERVO_LAYER1_LEFT2_OPEN', getattr(config, 'SERVO_LAYER1_LEFT_OPEN', 90))
+            }
+        
+        # Setup servo RIGHT2 (secondary pair) - BARU!
+        if right2_ch is not None:
+            self.servos['layer1_right2'] = {
+                'name': 'Layer 1 Right Door 2',
+                'channel': right2_ch,
                 'closed': getattr(config, 'SERVO_LAYER1_RIGHT2_CLOSED', getattr(config, 'SERVO_LAYER1_RIGHT_CLOSED', 0)),
                 'open': getattr(config, 'SERVO_LAYER1_RIGHT2_OPEN', getattr(config, 'SERVO_LAYER1_RIGHT_OPEN', 90))
             }
 
+        # Setup Layer 2 Selector
         if sel_ch is not None:
             self.servos['layer2_selector'] = {
                 'name': 'Layer 2 Selector',
@@ -143,6 +152,7 @@ class FiveServoHardware:
             cfg['current_angle'] = None
             cfg['last_move_time'] = 0
             print(f"[5ServoHW] Config {cfg['name']}: CH {cfg['channel']}")
+
 
     def _move_channel(self, channel, angle):
         """
@@ -224,31 +234,31 @@ class FiveServoHardware:
         return status
 
     def open_doors(self):
-        print("[5ServoHW] Opening Layer 1 doors (all pairs)...")
+        print("[5ServoHW] Opening Layer 1 doors (all 4 servos)...")
         # Ubah sudut buka pintu di: config.py → SERVO_LAYER1_*_OPEN
         # Buka setiap servo Layer 1 ke sudut 'open'-nya
         results = []
-        for sid in ('layer1_left_a', 'layer1_left_b', 'layer1_right_a', 'layer1_right_b'):
+        for sid in ('layer1_left', 'layer1_right', 'layer1_left2', 'layer1_right2'):
             if sid in self.servos:
                 results.append(self._move_servo(sid, self.servos[sid]['open']))
         all_ok = all(results) if results else True
         if all_ok:
             time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
-            print("[5ServoHW] ✓ Doors opened")
+            print("[5ServoHW] ✓ All doors opened")
         else:
             print(f"[5ServoHW] ⚠ Door open issue: {results}")
         return all_ok
 
     def close_doors(self):
-        print("[5ServoHW] Closing Layer 1 doors (all pairs)...")
+        print("[5ServoHW] Closing Layer 1 doors (all 4 servos)...")
         # Ubah sudut tutup pintu di: config.py → SERVO_LAYER1_*_CLOSED
         results = []
-        for sid in ('layer1_left_a', 'layer1_left_b', 'layer1_right_a', 'layer1_right_b'):
+        for sid in ('layer1_left', 'layer1_right', 'layer1_left2', 'layer1_right2'):
             if sid in self.servos:
                 results.append(self._move_servo(sid, self.servos[sid]['closed']))
         all_ok = all(results) if results else True
         if all_ok:
-            print("[5ServoHW] ✓ Doors closed")
+            print("[5ServoHW] ✓ All doors closed")
         else:
             print(f"[5ServoHW] ⚠ Door close issue: {results}")
         return all_ok
