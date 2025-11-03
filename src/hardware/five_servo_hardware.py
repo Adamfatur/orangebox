@@ -590,6 +590,51 @@ class FiveServoHardware:
             print(f"[5ServoHW] ✓ Selector → {angle}°")
         return ok
 
+    # ===== Layer 2 Helpers (Selector) =====
+    def center_selector(self):
+        """Kembalikan selector ke netral (horizontal) dengan teknik overshoot untuk menghilangkan backlash.
+        Tanpa sensor, kita gunakan verifikasi lunak berbasis timing & toleransi config.
+        """
+        if 'layer2_selector' not in self.servos:
+            print("[5ServoHW] ⚠️  No Layer 2 selector configured - skipping center")
+            return True
+        neutral = self.servos['layer2_selector'].get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
+        overshoot = abs(getattr(config, 'SERVO_LAYER2_NEUTRAL_OVERSHOOT_DEG', 3))
+        settle = max(0.0, float(getattr(config, 'SERVO_LAYER2_SETTLE_TIME', 0.15)))
+
+        # Approach netral dari satu sisi untuk menghilangkan slack
+        pre = max(0, min(180, neutral + overshoot))
+        post = max(0, min(180, neutral))
+
+        print(f"[5ServoHW] Centering selector → overshoot {pre}°, then settle at {post}°")
+        ok1 = self._move_servo('layer2_selector', pre)
+        if settle:
+            time.sleep(settle)
+        ok2 = self._move_servo('layer2_selector', post)
+        if settle:
+            time.sleep(settle)
+        return ok1 and ok2
+
+    def tilt_selector(self, tilt_angle: int):
+        """Miringkan selector relatif terhadap netral (positif = kanan, negatif = kiri)."""
+        if 'layer2_selector' not in self.servos:
+            print("[5ServoHW] ⚠️  No Layer 2 selector configured - skipping tilt")
+            return True
+        neutral = self.servos['layer2_selector'].get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
+        target = int(max(0, min(180, neutral + int(tilt_angle))))
+        print(f"[5ServoHW] Tilting selector: neutral {neutral}° → {target}° (tilt {tilt_angle}°)")
+        return self._move_servo('layer2_selector', target)
+
+    def tilt_and_return(self, tilt_angle: int):
+        """Tilt selector relatif netral dan kembali ke netral (dengan overshoot fix)."""
+        ok_tilt = self.tilt_selector(tilt_angle)
+        # Waktu agar sampah meluncur jika dipakai
+        time.sleep(max(0.0, float(getattr(config, 'SERVO_LAYER2_SETTLE_TIME', 0.15))))
+        ok_center = True
+        if getattr(config, 'SERVO_LAYER2_RETURN_AFTER_TILT', True):
+            ok_center = self.center_selector()
+        return ok_tilt and ok_center
+
     def reset_to_ready(self):
         print("[5ServoHW] === Resetting system to ready state ===")
         # Alur: tutup pintu → pusatkan selector (jika ada)
@@ -678,15 +723,14 @@ class FiveServoHardware:
             time.sleep(getattr(config, 'SERVO_CLOSE_DELAY', 0.3))
             print(f"[5ServoHW] ✓ Doors fully closed and stopped")
             
-            # Phase 5: Reset selector if present
+            # Phase 5: Reset selector if present (use overshoot centering)
             if has_selector:
-                print(f"[5ServoHW] PHASE 5 - Resetting selector to neutral...")
-                neutral = self.servos.get('layer2_selector', {}).get('neutral', 
-                                                                      getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
-                if not self.set_selector(neutral):
-                    print("[5ServoHW] ✗ WARNING: Selector reset failed (attempting recovery)")
+                print(f"[5ServoHW] PHASE 5 - Centering selector to neutral (overshoot)...")
+                if not self.center_selector():
+                    print("[5ServoHW] ✗ WARNING: Selector centering failed (attempting recovery)")
                 # Extra safety delay untuk memastikan semua servo berhenti
                 time.sleep(getattr(config, 'SERVO_RESET_DELAY', 0.3))
+                neutral = self.servos.get('layer2_selector', {}).get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
                 print(f"[5ServoHW] ✓ Selector locked at neutral ({neutral}°)")
             
             # FINAL VERIFICATION: Pastikan semua servo dalam keadaan berhenti

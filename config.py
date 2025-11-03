@@ -263,6 +263,18 @@ SERVO_LAYER2_BIN_A = 60             # Derajat untuk Bin A / Organik (misal: miri
 SERVO_LAYER2_BIN_B = 120            # Derajat untuk Bin B / Anorganik (misal: miring kanan 30°)
 SERVO_LAYER2_NEUTRAL = 90           # Posisi netral/tengah (horizontal)
 
+# Layer 2 Behavior Settings
+# Seberapa jauh miring dari netral (derajat). Digunakan untuk uji tilt tanpa klasifikasi
+SERVO_LAYER2_TILT_ANGLE = 30
+# Toleransi posisi netral (derajat) untuk verifikasi lunak (tanpa sensor)
+SERVO_LAYER2_NEUTRAL_TOLERANCE = 2
+# Overshoot untuk menghilangkan backlash saat kembali ke netral
+SERVO_LAYER2_NEUTRAL_OVERSHOOT_DEG = 3
+# Waktu tunggu agar posisi stabil setelah sampai target
+SERVO_LAYER2_SETTLE_TIME = 0.15
+# Setelah tilt, selalu kembali ke netral?
+SERVO_LAYER2_RETURN_AFTER_TILT = True
+
 # ============================================
 # TIMING - Atur Kecepatan Gerakan
 # ============================================
