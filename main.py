@@ -133,13 +133,40 @@ def main():
             
             # Check if on Raspberry Pi
             import platform
+            import subprocess
+            import os
+            
             if platform.system() == 'Linux':
                 try:
                     with open('/proc/cpuinfo', 'r') as f:
                         if 'Raspberry Pi' in f.read():
                             print("📍 Raspberry Pi detected")
+                            
+                            # Check if venv has --system-site-packages
+                            venv_pyvenv = os.path.join(os.path.dirname(sys.executable), '..', 'pyvenv.cfg')
+                            has_system_packages = False
+                            if os.path.exists(venv_pyvenv):
+                                with open(venv_pyvenv, 'r') as f:
+                                    if 'include-system-site-packages = true' in f.read():
+                                        has_system_packages = True
+                            
+                            if not has_system_packages:
+                                print("⚠️  Venv tidak punya akses ke system packages!")
+                                print("🔧 Recreating venv with --system-site-packages...")
+                                
+                                # Remove old venv and recreate
+                                venv_dir = os.path.join(os.getcwd(), '.venv')
+                                if os.path.exists(venv_dir):
+                                    import shutil
+                                    shutil.rmtree(venv_dir)
+                                
+                                subprocess.run(['python3', '-m', 'venv', '--system-site-packages', '.venv'], check=True)
+                                print("✓ Venv recreated with system packages access")
+                                print("\n🚀 Please run again: python3 main.py")
+                                return 1
+                            
+                            # Install opencv via apt if not exists
                             print("⚙️  Installing python3-opencv from apt...")
-                            import subprocess
                             subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
                             subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-opencv'], check=False)
                             print("\n✓ OpenCV installed. Please run again: python3 main.py")
@@ -148,8 +175,7 @@ def main():
                     pass
             
             print("\n💡 Quick fix:")
-            print("   bash start.sh")
-            print("   (or run: bash AFTER_PULL.sh)")
+            print("   ./start.sh")
             return 1
         else:
             raise
