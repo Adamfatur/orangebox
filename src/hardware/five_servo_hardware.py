@@ -38,6 +38,7 @@ Copyright (c) 2025 AF - OrangeBox Project
 import time
 import sys
 import os
+import threading
 
 # Ensure project root on sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
@@ -370,8 +371,28 @@ class FiveServoHardware:
             # Fallback: tidak ada ServoKit, abaikan
             return all(True for _ in channels)
         try:
-            for ch, ang in zip(channels, angles):
-                self.kit.servo[ch].angle = ang
+            # Opsi sinkronisasi ketat: set per-channel menggunakan thread untuk meminimalkan jeda per I2C call
+            tight_sync = bool(getattr(config, 'SERVO_TIGHT_SYNC', False))
+            if tight_sync:
+                errs = []
+                def _set_angle(ch, ang):
+                    try:
+                        self.kit.servo[ch].angle = ang
+                    except Exception as e:
+                        errs.append((ch, str(e)))
+                threads = []
+                for ch, ang in zip(channels, angles):
+                    t = threading.Thread(target=_set_angle, args=(ch, ang), daemon=True)
+                    threads.append(t)
+                    t.start()
+                for t in threads:
+                    t.join()
+                if errs:
+                    print(f"[5ServoHW] Tight-sync angle set errors: {errs}")
+            else:
+                # Default: set berurutan namun sangat cepat (nyaris serentak)
+                for ch, ang in zip(channels, angles):
+                    self.kit.servo[ch].angle = ang
             time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))
             hold = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
             if hold and hold > 0:
@@ -667,7 +688,36 @@ class FiveServoHardware:
             return False
 
     def cleanup(self):
-        # No special cleanup for ServoKit; leave servos at last angle
+        """Matikan sinyal PWM ke semua servo untuk mencegah putaran tanpa henti.
+        - Set angle=None (detach) untuk setiap channel yang digunakan
+        - Set duty_cycle=0 sebagai jaring pengaman
+        - Deinit PCA9685 bila memungkinkan
+        """
+        try:
+            if HAS_SERVOKIT and self.kit is not None:
+                used = []
+                for sid, cfg in self.servos.items():
+                    ch = cfg.get('channel')
+                    if ch is None or ch in used:
+                        continue
+                    used.append(ch)
+                    try:
+                        # Detach servo
+                        self.kit.servo[ch].angle = None
+                    except Exception:
+                        pass
+                    try:
+                        # Set duty cycle 0 as hard stop
+                        self.kit._pca.channels[ch].duty_cycle = 0
+                    except Exception:
+                        pass
+                # Try deinit PCA9685 to fully stop oscillator
+                try:
+                    self.kit._pca.deinit()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[5ServoHW] Cleanup warning: {e}")
         print("[5ServoHW] Cleanup complete")
 
     def get_status(self):

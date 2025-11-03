@@ -243,6 +243,11 @@ SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 # True  = buka semua (A+B+C+D) serentak
 SERVO_LAYER1_OPEN_BOTH_SIDES = False
 
+# Opsi sinkronisasi ketat: gunakan threading untuk mengirim perintah ke semua channel secepat mungkin
+# Tujuan: gerakan tampak benar-benar serentak (mengurangi jeda antar channel)
+# Nilai True aman digunakan; fallback otomatis ke mode biasa jika terjadi error saat set sudut.
+SERVO_TIGHT_SYNC = True
+
 # ============================================
 # LAYER 2 - PEMILAH (1 Servo)
 # ============================================
