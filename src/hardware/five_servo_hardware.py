@@ -598,18 +598,23 @@ class FiveServoHardware:
         print(f"[5ServoHW] === Starting sort to {bin_assignment} ({bin_angle}°) ===")
         
         try:
-            # Phase 1: Set selector to target - CRITICAL: WAIT FOR COMPLETE STOP
-            print(f"[5ServoHW] PHASE 1 - Setting selector to {bin_angle}°...")
-            if not self.set_selector(bin_angle):
-                print("[5ServoHW] ✗ ABORT: Selector movement failed")
-                return False
+            has_selector = ('layer2_selector' in self.servos)
             
-            # Extra safety delay untuk memastikan selector benar-benar berhenti
-            time.sleep(getattr(config, 'SERVO_DROP_DELAY', 0.3))
-            print(f"[5ServoHW] ✓ Selector locked at {bin_angle}°")
+            # Phase 1: Selector (skip entirely if tidak ada Layer 2)
+            if has_selector:
+                print(f"[5ServoHW] PHASE 1 - Setting selector to {bin_angle}°...")
+                if not self.set_selector(bin_angle):
+                    print("[5ServoHW] ✗ ABORT: Selector movement failed")
+                    return False
+                # Extra safety delay untuk memastikan selector benar-benar berhenti
+                time.sleep(getattr(config, 'SERVO_DROP_DELAY', 0.3))
+                print(f"[5ServoHW] ✓ Selector locked at {bin_angle}°")
+            else:
+                print("[5ServoHW] PHASE 1 - No Layer 2 selector: skipping selector phase")
             
             # Phase 2: Open Layer 1 doors - CRITICAL: WAIT FOR COMPLETE STOP
-            both_sides = getattr(config, 'SERVO_LAYER1_OPEN_BOTH_SIDES', False)
+            # Force open ALL if tidak ada selector (Layer-1 only mode)
+            both_sides = True if not has_selector else getattr(config, 'SERVO_LAYER1_OPEN_BOTH_SIDES', False)
             if both_sides:
                 print(f"[5ServoHW] PHASE 2 - Opening ALL doors (sync)...")
                 ok_open = self.open_all_sync()
@@ -643,16 +648,16 @@ class FiveServoHardware:
             time.sleep(getattr(config, 'SERVO_CLOSE_DELAY', 0.3))
             print(f"[5ServoHW] ✓ Doors fully closed and stopped")
             
-            # Phase 5: Reset selector to neutral - CRITICAL: FINAL STOP
-            print(f"[5ServoHW] PHASE 5 - Resetting selector to neutral...")
-            neutral = self.servos.get('layer2_selector', {}).get('neutral', 
-                                                                  getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
-            if not self.set_selector(neutral):
-                print("[5ServoHW] ✗ WARNING: Selector reset failed (attempting recovery)")
-            
-            # Extra safety delay untuk memastikan semua servo berhenti
-            time.sleep(getattr(config, 'SERVO_RESET_DELAY', 0.3))
-            print(f"[5ServoHW] ✓ Selector locked at neutral ({neutral}°)")
+            # Phase 5: Reset selector if present
+            if has_selector:
+                print(f"[5ServoHW] PHASE 5 - Resetting selector to neutral...")
+                neutral = self.servos.get('layer2_selector', {}).get('neutral', 
+                                                                      getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
+                if not self.set_selector(neutral):
+                    print("[5ServoHW] ✗ WARNING: Selector reset failed (attempting recovery)")
+                # Extra safety delay untuk memastikan semua servo berhenti
+                time.sleep(getattr(config, 'SERVO_RESET_DELAY', 0.3))
+                print(f"[5ServoHW] ✓ Selector locked at neutral ({neutral}°)")
             
             # FINAL VERIFICATION: Pastikan semua servo dalam keadaan berhenti
             print(f"[5ServoHW] === FINAL VERIFICATION ===")

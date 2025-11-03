@@ -241,7 +241,7 @@ SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 # Sinkronisasi Layer 1: buka keempat pintu sekaligus (A+B+C+D) atau hanya sisi sesuai BIN
 # False = buka sesuai sisi (BIN A=LEFT → A+B; BIN B=RIGHT → C+D)
 # True  = buka semua (A+B+C+D) serentak
-SERVO_LAYER1_OPEN_BOTH_SIDES = False
+SERVO_LAYER1_OPEN_BOTH_SIDES = True
 
 # Opsi sinkronisasi ketat: gunakan threading untuk mengirim perintah ke semua channel secepat mungkin
 # Tujuan: gerakan tampak benar-benar serentak (mengurangi jeda antar channel)
