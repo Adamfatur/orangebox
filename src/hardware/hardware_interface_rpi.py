@@ -264,9 +264,22 @@ class HardwareInterface:
                 if not self.camera.isOpened():
                     raise RuntimeError(f"Cannot open any camera (tried 0-3)")
             
-            # Set resolution
+            # Set resolution and preferred MJPG format for stability/perf on RPi
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            try:
+                self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                self.camera.set(cv2.CAP_PROP_FPS, 30)
+            except Exception:
+                pass
+            
+            # Warm-up frames to stabilize exposure/AGC
+            try:
+                for _ in range(5):
+                    self.camera.read()
+                    time.sleep(0.05)
+            except Exception:
+                pass
             
             # Test read
             ret, test_frame = self.camera.read()
@@ -370,6 +383,30 @@ class HardwareInterface:
         if self.camera is None:
             print("[ERROR] Camera not initialized")
             return None
+        try:
+            if self.camera_type == "picamera":
+                # Capture dari Pi Camera
+                frame = self.camera.capture_array()
+                # Convert RGB to BGR (OpenCV format)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            else:
+                # Capture dari USB webcam
+                ret, frame = self.camera.read()
+                if not ret or frame is None:
+                    print("[ERROR] Failed to capture frame")
+                    return None
+            # Rate-limit camera capture logs to avoid spam
+            try:
+                now = time.time()
+                if (now - self._last_frame_log_time) >= self._frame_log_interval:
+                    print(f"[HardwareInterface] 📸 Frame captured ({frame.shape[1]}x{frame.shape[0]})")
+                    self._last_frame_log_time = now
+            except Exception:
+                pass
+            return frame
+        except Exception as e:
+            print(f"[ERROR] Camera capture failed: {e}")
+            return None
 
     # ====== UI Helpers (ported minimal dari mock untuk selaraskan gaya) ======
     def _load_logo(self):
@@ -421,37 +458,6 @@ class HardwareInterface:
             cv2.putText(img, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
         except Exception:
             pass
-        
-        try:
-            if self.camera_type == "picamera":
-                # Capture dari Pi Camera
-                frame = self.camera.capture_array()
-                
-                # Convert RGB to BGR (OpenCV format)
-                import cv2
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                
-            else:  # opencv
-                # Capture dari USB webcam
-                ret, frame = self.camera.read()
-                
-                if not ret or frame is None:
-                    print("[ERROR] Failed to capture frame")
-                    return None
-            
-            # Rate-limit camera capture logs to avoid spam
-            try:
-                now = time.time()
-                if (now - self._last_frame_log_time) >= self._frame_log_interval:
-                    print(f"[HardwareInterface] 📸 Frame captured ({frame.shape[1]}x{frame.shape[0]})")
-                    self._last_frame_log_time = now
-            except Exception:
-                pass
-            return frame
-        
-        except Exception as e:
-            print(f"[ERROR] Camera capture failed: {e}")
-            return None
 
     def sort_to_bin_A(self):
         """
