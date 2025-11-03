@@ -49,15 +49,13 @@ echo "📦 Installing dependencies for $PLATFORM..."
 if [[ "$PLATFORM" == "rpi" ]]; then
     # Raspberry Pi - install system packages first
     echo "Installing system packages..."
-    sudo apt update -qq
-    # Note: libatlas-base-dev is not available on Raspberry Pi OS Bookworm/ARM64
-    # Use OpenBLAS + LAPACK instead for NumPy/linear algebra support
-    sudo apt install -y python3-pip python3-opencv libopenblas-dev liblapack-dev
+    sudo apt update --allow-releaseinfo-change -qq
+    
+    # Install essential packages
+    sudo apt install -y python3-pip python3-venv
     
     # Create and use virtual environment to avoid PEP 668 (externally-managed)
     echo "Setting up Python virtual environment (.venv)..."
-    # Ensure python3-venv is installed
-    sudo apt-get install -y python3-venv
     # Create venv in project root (include system site-packages so apt libs visible)
     if [ ! -d ".venv" ]; then
         python3 -m venv .venv --system-site-packages
@@ -66,7 +64,6 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     .venv/bin/pip install --upgrade pip
     
     echo "Installing system packages for Raspberry Pi..."
-    sudo apt-get update
     # OpenCV via apt (faster, has native bindings)
     sudo apt-get install -y python3-opencv
     # Libcamera + Picamera2 support (Bookworm)
@@ -147,8 +144,16 @@ echo ""
 # Auto-detect available cameras
 echo "Detecting available cameras..."
 CAMERAS=()
+
+# Use appropriate Python based on platform
+if [[ "$PLATFORM" == "rpi" ]]; then
+    PYTHON_CMD=".venv/bin/python3"
+else
+    PYTHON_CMD="python3"
+fi
+
 for i in {0..5}; do
-    if python3 -c "import cv2; cap = cv2.VideoCapture($i); ret, _ = cap.read(); cap.release(); exit(0 if ret else 1)" 2>/dev/null; then
+    if $PYTHON_CMD -c "import cv2; cap = cv2.VideoCapture($i); ret, _ = cap.read(); cap.release(); exit(0 if ret else 1)" 2>/dev/null; then
         CAMERAS+=($i)
     fi
 done
@@ -230,7 +235,7 @@ echo ""
 
 # Test camera
 echo "🧪 Testing camera..."
-if python3 -c "
+if $PYTHON_CMD -c "
 import cv2
 import sys
 

@@ -13,10 +13,23 @@ Sistem klasifikasi dan sortir sampah otomatis menggunakan AI. Dapat dijalankan d
 
 Installer akan:
 - Mendeteksi platform (macOS/Raspberry Pi)
-- Membuat dan menggunakan virtualenv `.venv`
+- Membuat dan menggunakan virtualenv `.venv` dengan `--system-site-packages`
 - Menginstal semua dependency ke `.venv` (hindari konflik PEP 668)
 - Mengaktifkan kamera/I2C (RPi), dan paket pendukung (OpenCV, NumPy, dsb.)
 - Mengupdate `config.py` sesuai platform
+
+### 🔧 Jika Ada Error "No module named 'cv2'" di Raspberry Pi
+
+Jika setelah instalasi muncul error `ModuleNotFoundError: No module named 'cv2'`, jalankan:
+
+```bash
+./fix_venv.sh
+```
+
+Script ini akan:
+- Reinstall python3-opencv dari apt
+- Recreate virtual environment dengan `--system-site-packages`
+- Verifikasi OpenCV, PiCamera2, dan TFLite tersedia
 
 ## ▶️ Menjalankan Aplikasi
 
