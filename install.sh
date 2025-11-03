@@ -49,7 +49,7 @@ echo "📦 Installing dependencies for $PLATFORM..."
 if [[ "$PLATFORM" == "rpi" ]]; then
     # Raspberry Pi - install system packages first
     echo "Installing system packages..."
-    sudo apt update -qq
+    sudo apt update --allow-releaseinfo-change -qq
     # Note: libatlas-base-dev is not available on Raspberry Pi OS Bookworm/ARM64
     # Use OpenBLAS + LAPACK instead for NumPy/linear algebra support
     sudo apt install -y python3-pip python3-opencv libopenblas-dev liblapack-dev
@@ -66,7 +66,7 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     .venv/bin/pip install --upgrade pip
     
     echo "Installing system packages for Raspberry Pi..."
-    sudo apt-get update
+    sudo apt-get update --allow-releaseinfo-change
     # OpenCV via apt (faster, has native bindings)
     sudo apt-get install -y python3-opencv
     # Libcamera + Picamera2 support (Bookworm)
