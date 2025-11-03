@@ -266,8 +266,8 @@ class FiveServoHardware:
     def set_selector(self, angle):
         # Sudut selector didefinisikan di config.py → SERVO_LAYER2_BIN_A/B/NEUTRAL
         if 'layer2_selector' not in self.servos:
-            print("[5ServoHW] No selector configured")
-            return False
+            print("[5ServoHW] ⚠️  No Layer 2 selector configured - skipping")
+            return True  # Return True untuk tidak block sorting
         ok = self._move_servo('layer2_selector', angle)
         if ok:
             print(f"[5ServoHW] ✓ Selector → {angle}°")
@@ -275,15 +275,20 @@ class FiveServoHardware:
 
     def reset_to_ready(self):
         print("[5ServoHW] === Resetting system to ready state ===")
-        # Alur: tutup pintu → pusatkan selector
+        # Alur: tutup pintu → pusatkan selector (jika ada)
         try:
             # Close doors first
             self.close_doors()
             time.sleep(getattr(config, 'SERVO_CLOSE_DELAY', 0.3))
-            # Center selector
-            neutral = self.servos['layer2_selector'].get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90)) if 'layer2_selector' in self.servos else getattr(config, 'SERVO_LAYER2_NEUTRAL', 90)
-            self.set_selector(neutral)
-            time.sleep(getattr(config, 'SERVO_RESET_DELAY', 0.3))
+            
+            # Center selector (optional, skip if not configured)
+            if 'layer2_selector' in self.servos:
+                neutral = self.servos['layer2_selector'].get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
+                self.set_selector(neutral)
+                time.sleep(getattr(config, 'SERVO_RESET_DELAY', 0.3))
+            else:
+                print("[5ServoHW] ⚠️  No Layer 2 - doors only mode")
+            
             print("[5ServoHW] ✓ System ready")
             return True
         except Exception as e:

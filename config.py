@@ -208,27 +208,27 @@ SERVO_DRIVER = 'servokit'   # 'servokit' = pakai PCA9685 (5 servo) | 'gpio' = la
 # ============================================
 # Fungsi: Pintu kiri/kanan buat jatuhkan sampah ke bawah
 
-# 🚪 Pintu Kiri
+# 🚪 Pintu Kiri (2 servo)
 SERVO_LAYER1_LEFT_PIN = 12          # Pin GPIO (kalau pakai GPIO)
-SERVO_LAYER1_LEFT_CHANNEL = 2       # Channel PCA9685 (kalau pakai ServoKit)
+SERVO_LAYER1_LEFT_CHANNEL = 0       # Channel PCA9685 (kalau pakai ServoKit)
 SERVO_LAYER1_LEFT_CLOSED = 0        # Derajat saat TUTUP (misal: 0° = horizontal)
 SERVO_LAYER1_LEFT_OPEN = 90         # Derajat saat BUKA (misal: 90° = vertikal ke bawah)
 
-# 🚪 Pintu Kanan  
+# 🚪 Pintu Kanan (2 servo)
 SERVO_LAYER1_RIGHT_PIN = 13         # Pin GPIO (kalau pakai GPIO)
-SERVO_LAYER1_RIGHT_CHANNEL = 3      # Channel PCA9685 (kalau pakai ServoKit)
+SERVO_LAYER1_RIGHT_CHANNEL = 2      # Channel PCA9685 (kalau pakai ServoKit)
 SERVO_LAYER1_RIGHT_CLOSED = 0       # Derajat saat TUTUP
 SERVO_LAYER1_RIGHT_OPEN = 90        # Derajat saat BUKA
 
-# 🚪 Pintu Tambahan (opsional, kalau pakai 4 servo untuk Layer 1)
-# User punya 4 servo Layer 1 → Aktifkan dengan set channel/pin
+# 🚪 Pintu Kiri 2 (pasangan kiri)
 SERVO_LAYER1_LEFT2_PIN = 19         # Pin GPIO (kalau pakai GPIO) - Set ke None untuk disable
-SERVO_LAYER1_LEFT2_CHANNEL = 4      # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
+SERVO_LAYER1_LEFT2_CHANNEL = 1      # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
 SERVO_LAYER1_LEFT2_CLOSED = SERVO_LAYER1_LEFT_CLOSED
 SERVO_LAYER1_LEFT2_OPEN = SERVO_LAYER1_LEFT_OPEN
 
+# 🚪 Pintu Kanan 2 (pasangan kanan)
 SERVO_LAYER1_RIGHT2_PIN = 26        # Pin GPIO (kalau pakai GPIO) - Set ke None untuk disable
-SERVO_LAYER1_RIGHT2_CHANNEL = 5     # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
+SERVO_LAYER1_RIGHT2_CHANNEL = 3     # Channel PCA9685 (kalau pakai ServoKit) - Set ke None untuk disable
 SERVO_LAYER1_RIGHT2_CLOSED = SERVO_LAYER1_RIGHT_CLOSED
 SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 
@@ -239,7 +239,9 @@ SERVO_LAYER1_RIGHT2_OPEN = SERVO_LAYER1_RIGHT_OPEN
 
 # 🎯 Servo Pemilah
 SERVO_LAYER2_SELECTOR_PIN = 18      # Pin GPIO (kalau pakai GPIO)
-SERVO_LAYER2_SELECTOR_CHANNEL = 0   # Channel PCA9685 (kalau pakai ServoKit)
+SERVO_LAYER2_SELECTOR_CHANNEL = None   # Set ke None untuk disable (nanti bisa pakai CH 4 atau 5)
+# ⚠️  Layer 2 belum ada servo fisik, tapi tetap di-simulasi di kode
+# ⚠️  Nanti kalau mau tambah, set SERVO_LAYER2_SELECTOR_CHANNEL = 4 (atau channel lain yang kosong)
 SERVO_LAYER2_BIN_A = 60             # Derajat untuk Bin A / Organik (misal: miring kiri 30°)
 SERVO_LAYER2_BIN_B = 120            # Derajat untuk Bin B / Anorganik (misal: miring kanan 30°)
 SERVO_LAYER2_NEUTRAL = 90           # Posisi netral/tengah (horizontal)
