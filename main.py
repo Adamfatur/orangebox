@@ -123,6 +123,7 @@ def main():
     
     # Import dependencies inside main to catch any import errors
     from core.waste_classifier import WasteClassifier
+    from core.mock_classifier import MockClassifier
     from core.main_controller import MainController
     
     # Auto-select hardware interface based on config
@@ -206,41 +207,8 @@ def main():
         
         if args.test:
             print("      ⚠️  TEST MODE: Using mock classifier (random predictions)")
-            
-            # Mock classifier untuk testing
-            class MockClassifier:
-                def __init__(self):
-                    self.labels = ['ORGANIC', 'ANORGANIC']
-                    print("      ✓ Mock Classifier initialized")
-                
-                def predict_with_all_scores(self, image):
-                    import random
-                    import time
-                    time.sleep(0.1)  # Simulasi inference time
-                    
-                    is_organic = random.choice([True, False])
-                    confidence = random.uniform(0.65, 0.98)
-                    
-                    if is_organic:
-                        return {
-                            'label': 'ORGANIC',
-                            'confidence': confidence,
-                            'all_scores': {
-                                'ORGANIC': confidence, 
-                                'ANORGANIC': 1.0 - confidence
-                            }
-                        }
-                    else:
-                        return {
-                            'label': 'ANORGANIC',
-                            'confidence': confidence,
-                            'all_scores': {
-                                'ORGANIC': 1.0 - confidence,
-                                'ANORGANIC': confidence
-                            }
-                        }
-            
             classifier = MockClassifier()
+            print("      ✓ Mock Classifier initialized")
         else:
             # Real classifier dengan auto-fallback
             auto_selected = False
@@ -257,37 +225,9 @@ def main():
                     args.test = True
             
             if args.test:
-                # Mock classifier untuk testing otomatis jika model/interpreter tidak tersedia
-                class MockClassifier:
-                    def __init__(self):
-                        self.labels = ['ORGANIC', 'ANORGANIC']
-                        print("      ✓ Mock Classifier initialized (auto-fallback)")
-                    
-                    def predict_with_all_scores(self, image):
-                        import random
-                        import time
-                        time.sleep(0.1)
-                        is_organic = random.choice([True, False])
-                        confidence = random.uniform(0.65, 0.98)
-                        if is_organic:
-                            return {
-                                'label': 'ORGANIC',
-                                'confidence': confidence,
-                                'all_scores': {
-                                    'ORGANIC': confidence,
-                                    'ANORGANIC': 1.0 - confidence
-                                }
-                            }
-                        else:
-                            return {
-                                'label': 'ANORGANIC',
-                                'confidence': confidence,
-                                'all_scores': {
-                                    'ORGANIC': 1.0 - confidence,
-                                    'ANORGANIC': confidence
-                                }
-                            }
+                # Fallback ke mock jika model tidak ada
                 classifier = MockClassifier()
+                print("      ✓ Mock Classifier initialized (auto-fallback)")
             else:
                 # Try to initialize real classifier. If it fails, attempt other .tflite files in models dir
                 tried_models = [args.model]
@@ -322,39 +262,9 @@ def main():
                     if classifier is None:
                         # All attempts failed; fallback to mock classifier
                         print("      → All model attempts failed. Falling back to TEST mode (Mock Classifier)")
-                        args.test = True
-                        class MockClassifier:
-                            def __init__(self):
-                                self.labels = ['ORGANIC', 'ANORGANIC']
-                                print("      ✓ Mock Classifier initialized (auto-fallback)")
-
-                            def predict_with_all_scores(self, image):
-                                import random
-                                import time
-                                time.sleep(0.1)
-                                is_organic = random.choice([True, False])
-                                confidence = random.uniform(0.65, 0.98)
-                                if is_organic:
-                                    return {
-                                        'label': 'ORGANIC',
-                                        'confidence': confidence,
-                                        'all_scores': {
-                                            'ORGANIC': confidence,
-                                            'ANORGANIC': 1.0 - confidence
-                                        }
-                                    }
-                                else:
-                                    return {
-                                        'label': 'ANORGANIC',
-                                        'confidence': confidence,
-                                        'all_scores': {
-                                            'ORGANIC': 1.0 - confidence,
-                                            'ANORGANIC': confidence
-                                        }
-                                    }
                         classifier = MockClassifier()
-                    classifier = MockClassifier()
-                    args.test = True
+                        print("      ✓ Mock Classifier initialized (auto-fallback)")
+                        args.test = True
         
         print()
         

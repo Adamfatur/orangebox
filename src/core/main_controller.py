@@ -957,25 +957,8 @@ def main():
     """
     print("Testing MainController with mock components...\n")
     
-    # Mock classifier (untuk testing tanpa model)
-    class MockClassifier:
-        def predict_with_all_scores(self, image):
-            import random
-            is_organic = random.choice([True, False])
-            confidence = random.uniform(0.7, 0.99)
-            
-            if is_organic:
-                return {
-                    'label': 'ORGANIC',
-                    'confidence': confidence,
-                    'all_scores': {'ORGANIC': confidence, 'ANORGANIC': 1-confidence}
-                }
-            else:
-                return {
-                    'label': 'ANORGANIC',
-                    'confidence': confidence,
-                    'all_scores': {'ORGANIC': 1-confidence, 'ANORGANIC': confidence}
-                }
+    # Import mock classifier
+    from .mock_classifier import MockClassifier
     
     # Mock hardware (minimal)
     class MockHW:
