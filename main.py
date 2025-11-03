@@ -222,42 +222,70 @@ def main():
                             }
                 classifier = MockClassifier()
             else:
+                # Try to initialize real classifier. If it fails, attempt other .tflite files in models dir
+                tried_models = [args.model]
+                classifier = None
                 try:
                     classifier = WasteClassifier(model_path=args.model, labels_path=args.labels)
                     print("      ✓ Waste Classifier initialized")
-                except ModuleNotFoundError as e:
-                    print(f"      ⚠️  Interpreter tidak tersedia: {e}")
-                    print("      → Auto-switch ke TEST mode (Mock Classifier)")
-                    # Fallback ke mock tanpa menghentikan program
-                    class MockClassifier:
-                        def __init__(self):
-                            self.labels = ['ORGANIC', 'ANORGANIC']
-                            print("      ✓ Mock Classifier initialized (auto-fallback)")
-                        
-                        def predict_with_all_scores(self, image):
-                            import random
-                            import time
-                            time.sleep(0.1)
-                            is_organic = random.choice([True, False])
-                            confidence = random.uniform(0.65, 0.98)
-                            if is_organic:
-                                return {
-                                    'label': 'ORGANIC',
-                                    'confidence': confidence,
-                                    'all_scores': {
-                                        'ORGANIC': confidence,
-                                        'ANORGANIC': 1.0 - confidence
+                except Exception as e:
+                    print(f"      ⚠️  WasteClassifier failed to initialize with {args.model}: {e}")
+                    # Try other .tflite files in models directory (auto-selection)
+                    models_dir = os.path.join(script_dir, 'models')
+                    candidates = []
+                    if os.path.isdir(models_dir):
+                        for f in os.listdir(models_dir):
+                            if f.endswith('.tflite'):
+                                candidates.append(os.path.join(models_dir, f))
+
+                    # Remove the already-tried model
+                    candidates = [c for c in candidates if c not in tried_models]
+
+                    for cand in candidates:
+                        print(f"      → Attempting alternate model: {os.path.relpath(cand, script_dir)}")
+                        try:
+                            classifier = WasteClassifier(model_path=cand, labels_path=args.labels)
+                            args.model = cand
+                            print(f"      ✓ Waste Classifier initialized with {os.path.relpath(cand, script_dir)}")
+                            break
+                        except Exception as e2:
+                            print(f"      ✗ Failed with {os.path.relpath(cand, script_dir)}: {e2}")
+                            continue
+
+                    if classifier is None:
+                        # All attempts failed; fallback to mock classifier
+                        print("      → All model attempts failed. Falling back to TEST mode (Mock Classifier)")
+                        args.test = True
+                        class MockClassifier:
+                            def __init__(self):
+                                self.labels = ['ORGANIC', 'ANORGANIC']
+                                print("      ✓ Mock Classifier initialized (auto-fallback)")
+
+                            def predict_with_all_scores(self, image):
+                                import random
+                                import time
+                                time.sleep(0.1)
+                                is_organic = random.choice([True, False])
+                                confidence = random.uniform(0.65, 0.98)
+                                if is_organic:
+                                    return {
+                                        'label': 'ORGANIC',
+                                        'confidence': confidence,
+                                        'all_scores': {
+                                            'ORGANIC': confidence,
+                                            'ANORGANIC': 1.0 - confidence
+                                        }
                                     }
-                                }
-                            else:
-                                return {
-                                    'label': 'ANORGANIC',
-                                    'confidence': confidence,
-                                    'all_scores': {
-                                        'ORGANIC': 1.0 - confidence,
-                                        'ANORGANIC': confidence
+                                else:
+                                    return {
+                                        'label': 'ANORGANIC',
+                                        'confidence': confidence,
+                                        'all_scores': {
+                                            'ORGANIC': 1.0 - confidence,
+                                            'ANORGANIC': confidence
+                                        }
                                     }
-                                }
+                        classifier = MockClassifier()
                     classifier = MockClassifier()
                     args.test = True
         

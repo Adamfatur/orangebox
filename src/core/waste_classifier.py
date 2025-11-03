@@ -87,24 +87,65 @@ class WasteClassifier:
         
         # Fallback to TensorFlow Lite
         if not interpreter_loaded:
+            # Check if tensorflow package metadata exists without importing
             try:
-                print("[WasteClassifier] Trying tensorflow.lite...")
-                import tensorflow as tf
-                
-                # Load interpreter (can also segfault!)
-                self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
-                interpreter_loaded = True
-                print("[WasteClassifier] ✓ Using tensorflow.lite")
-                
-            except (ImportError, AttributeError) as e:
+                import importlib.util
+                spec = importlib.util.find_spec("tensorflow")
+            except Exception:
+                spec = None
+
+            if spec is None:
+                # No tensorflow package found -- instruct user to install tflite-runtime or tensorflow
                 raise RuntimeError(
                     f"Cannot load TFLite interpreter. Install either:\n"
-                    f"  1. tflite-runtime: sudo apt install python3-tflite-runtime\n"
-                    f"  2. tensorflow: pip install tensorflow\n"
-                    f"Previous errors: {last_error}, {e}"
+                    f"  1. tflite-runtime (recommended on Raspberry Pi): sudo apt install python3-tflite-runtime\n"
+                    f"  2. tensorflow (pip): pip install tensorflow\n"
+                    f"Previous errors: {last_error}"
                 )
+
+            # tensorflow package exists; but importing it in-process may SEGFAULT on some systems.
+            # To avoid crashing the main process, test tensorflow + Interpreter creation in a subprocess first.
+            import subprocess
+            import sys
+            from shlex import quote
+
+            print("[WasteClassifier] tensorflow package detected; testing import in isolated subprocess...")
+            test_cmd = [
+                sys.executable,
+                "-c",
+                (
+                    "import tensorflow as tf, sys\n"
+                    "try:\n"
+                    "  tf.lite.Interpreter(model_path=\"" + self.model_path.replace('"', '\\"') + "\")\n"
+                    "  print('TF_OK')\n"
+                    "except Exception as e:\n"
+                    "  sys.stderr.write(str(e))\n"
+                    "  sys.exit(2)\n"
+                ),
+            ]
+
+            try:
+                proc = subprocess.run(test_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=25)
+                if proc.returncode != 0:
+                    stderr = proc.stderr.decode(errors='replace')[:1000]
+                    stdout = proc.stdout.decode(errors='replace')[:1000]
+                    print(f"[WasteClassifier] tensorflow subprocess test failed (rc={proc.returncode})\nstdout={stdout}\nstderr={stderr}")
+                    raise RuntimeError("tensorflow detected but failed to initialize Interpreter in subprocess")
+                else:
+                    print("[WasteClassifier] tensorflow subprocess test OK")
+                    # Now safe-ish to import in-process (best-effort). If this still crashes, it will be a hard crash.
+                    try:
+                        import tensorflow as tf
+                        self.interpreter = tf.lite.Interpreter(model_path=self.model_path)
+                        interpreter_loaded = True
+                        print("[WasteClassifier] ✓ Using tensorflow.lite")
+                    except Exception as e:
+                        raise RuntimeError(f"tensorflow available but failed to import in-process: {e}")
+
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("tensorflow subprocess test timed out; skipping tensorflow import to avoid segfault")
             except Exception as e:
-                raise RuntimeError(f"Failed to load model with tensorflow.lite: {e}")
+                raise RuntimeError(f"tensorflow fallback failed: {e}")
         
         if not interpreter_loaded:
             raise RuntimeError("Failed to load interpreter with any available runtime")
