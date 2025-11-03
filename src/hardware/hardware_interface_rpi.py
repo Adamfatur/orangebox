@@ -19,11 +19,19 @@ Hardware yang diperlukan:
 #   Untuk GPIO servo (PWM langsung), gunakan `src/hardware/gpio_servo_hardware.py`
 #   dan set derajat di `config.py` (lebih umum dipakai di proyek ini).
 
+# CRITICAL: Fix Qt platform plugin error on Raspberry Pi
+# OpenCV tries to use Wayland but it's not available in venv
+# Force X11 backend or headless mode
+import os
+if 'QT_QPA_PLATFORM' not in os.environ:
+    # Try X11 first (most common on Raspberry Pi Desktop)
+    os.environ['QT_QPA_PLATFORM'] = 'xcb'
+    # If xcb fails, OpenCV will auto-fallback to offscreen mode
+
 import time
 import numpy as np
 from typing import Optional
 import sys
-import os
 import cv2
 import config
 
