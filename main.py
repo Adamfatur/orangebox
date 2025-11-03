@@ -192,6 +192,28 @@ def main():
         except Exception as e:
             print(f"⚠️  Auto-fix error: {e}")
     
+    # Tambahan auto-fix khusus Raspberry Pi untuk TFLite dan Database
+    if platform.system() == 'Linux':
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                if 'Raspberry Pi' in f.read():
+                    # tflite-runtime (gunakan apt, lebih stabil di RPi)
+                    try:
+                        import tflite_runtime.interpreter as _tfl
+                    except Exception:
+                        print("⚙️  Installing tflite-runtime (apt)...")
+                        subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
+                        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-tflite-runtime'], check=False)
+                    
+                    # pymysql untuk database logging
+                    try:
+                        import pymysql  # noqa: F401
+                    except Exception:
+                        print("⚙️  Installing pymysql (pip)...")
+                        subprocess.run([sys.executable, '-m', 'pip', 'install', 'pymysql'], check=False)
+        except Exception:
+            pass
+    
     # CRITICAL: Import dependencies and auto-fix if needed
     try:
         from core.waste_classifier import WasteClassifier

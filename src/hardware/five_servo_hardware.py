@@ -69,7 +69,7 @@ class FiveServoHardware:
         try:
             # Initialize ServoKit with 16 channels, custom address if provided
             address = getattr(config, 'PCA9685_I2C_ADDRESS', 0x40)
-            self.kit = ServoKit(channels=16, address=address)
+            self.kit = self._init_servokit(address)
             # Set frequency explicitly for MG996R
             try:
                 self.kit._pca.frequency = getattr(config, 'PCA9685_FREQUENCY', 50)
@@ -83,6 +83,25 @@ class FiveServoHardware:
             print(f"[5ServoHW] Error initializing ServoKit: {e}")
             import traceback
             traceback.print_exc()
+
+            # Auto-fix: coba enable I2C di Raspberry Pi, lalu retry sekali
+            if self._attempt_enable_i2c():
+                try:
+                    address = getattr(config, 'PCA9685_I2C_ADDRESS', 0x40)
+                    self.kit = self._init_servokit(address)
+                    try:
+                        self.kit._pca.frequency = getattr(config, 'PCA9685_FREQUENCY', 50)
+                    except Exception:
+                        pass
+                    print(f"[5ServoHW] PCA9685 initialized after I2C fix at 0x{address:02X}")
+                    self._setup_servos_config_only()
+                    self.servos_active = True
+                    return
+                except Exception as e2:
+                    print(f"[5ServoHW] Retry failed: {e2}")
+                    traceback.print_exc()
+
+            # Fallback to simulation
             self._setup_servos_config_only()
 
     def _setup_servos_config_only(self):
@@ -208,6 +227,69 @@ class FiveServoHardware:
             print(f"[5ServoHW] Move error CH{channel} → {angle}°: {e}")
             import traceback
             traceback.print_exc()
+            return False
+
+    def _init_servokit(self, address):
+        """Inisialisasi ServoKit dengan pengecekan alamat I2C PCA9685 jika memungkinkan."""
+        # Jika i2c-tools tersedia, coba cek apakah alamat PCA9685 terlihat
+        try:
+            import shutil as _sh
+            import subprocess as _sp
+            if _sh.which('i2cdetect'):
+                # Cek bus 1 yang umum dipakai di Raspberry Pi
+                out = _sp.run(['i2cdetect', '-y', '1'], capture_output=True, text=True, timeout=3)
+                if out.returncode == 0 and f"{address:02x}" not in out.stdout.lower():
+                    print(f"[5ServoHW] Warning: I2C scan tidak menemukan 0x{address:02X} di bus 1.")
+                    print("            Pastikan kabel SDA/SCL benar dan board PCA9685 mendapat power 5V.")
+        except Exception:
+            pass
+
+        return ServoKit(channels=16, address=address)
+
+    def _attempt_enable_i2c(self):
+        """Coba enable I2C secara otomatis di Raspberry Pi. Kembalikan True jika langkah dilakukan.
+        Catatan: Bisa butuh reboot agar /dev/i2c-1 muncul dan group i2c aktif untuk user.
+        """
+        try:
+            import platform
+            if platform.system() != 'Linux':
+                return False
+            # Deteksi Raspberry Pi melalui /proc/cpuinfo
+            try:
+                with open('/proc/cpuinfo', 'r') as f:
+                    if 'Raspberry Pi' not in f.read():
+                        return False
+            except Exception:
+                return False
+
+            print("[5ServoHW] 🔧 Attempting to enable I2C automatically...")
+            import subprocess as sp
+            import shutil as sh
+            import os as _os
+
+            # Install tools if available
+            if sh.which('apt-get'):
+                sp.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
+                sp.run(['sudo', 'apt-get', 'install', '-y', 'i2c-tools', 'python3-smbus', 'python3-rpi.gpio'], check=False)
+
+            # Enable via raspi-config if present
+            if sh.which('raspi-config'):
+                sp.run(['sudo', 'raspi-config', 'nonint', 'do_i2c', '0'], check=False)
+
+            # Load i2c-dev module
+            sp.run(['sudo', 'modprobe', 'i2c-dev'], check=False)
+
+            # Tambahkan user ke group i2c (perlu logout/reboot)
+            user = _os.environ.get('SUDO_USER') or _os.environ.get('USER')
+            if user:
+                sp.run(['sudo', 'usermod', '-aG', 'i2c', user], check=False)
+
+            # Beritahu kemungkinan perlu reboot
+            print("[5ServoHW] ✅ I2C enable commands applied. Reboot mungkin diperlukan agar aktif.")
+            print("           Jika masih gagal, reboot lalu jalankan lagi: sudo reboot")
+            return True
+        except Exception as e:
+            print(f"[5ServoHW] I2C auto-enable failed: {e}")
             return False
 
     def _move_servo(self, servo_id, angle):
