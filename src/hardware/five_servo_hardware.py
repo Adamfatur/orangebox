@@ -316,33 +316,114 @@ class FiveServoHardware:
         return status
 
     def open_doors(self):
-        print("[5ServoHW] Opening Layer 1 doors (all 4 servos)...")
-        # Ubah sudut buka pintu di: config.py → SERVO_LAYER1_*_OPEN
-        # Buka setiap servo Layer 1 ke sudut 'open'-nya
+        """Kompatibilitas lama: buka semua pintu. Tidak disarankan.
+        Gunakan open_side('left'|'right') untuk kontrol presisi.
+        """
+        print("[5ServoHW] Opening Layer 1 doors (ALL) — legacy mode")
+        left_ok = self.open_side('left')
+        right_ok = self.open_side('right')
+        return left_ok and right_ok
+
+    def open_side(self, side: str):
+        """Buka sepasang pintu pada sisi tertentu (left/right) secara selaras.
+        - Sisi kiri: servo A (front-left) dan B (back-left) → 'layer1_left' & 'layer1_left2'
+        - Sisi kanan: servo C (back-right) dan D (front-right) → 'layer1_right' & 'layer1_right2'
+        Sudut open masing-masing servo diambil dari config dan bisa berbeda (arah berlawanan).
+        """
+        side = side.lower().strip()
+        if side not in ('left', 'right'):
+            print(f"[5ServoHW] Invalid side: {side}")
+            return False
+        pair = ('layer1_left', 'layer1_left2') if side == 'left' else ('layer1_right', 'layer1_right2')
+        print(f"[5ServoHW] Opening Layer 1 doors ({side.upper()} pair: {pair[0]}, {pair[1]})...")
+        # Jika ServoKit aktif, gerakkan kedua channel secara sinkron
         results = []
-        for sid in ('layer1_left', 'layer1_right', 'layer1_left2', 'layer1_right2'):
-            if sid in self.servos:
-                results.append(self._move_servo(sid, self.servos[sid]['open']))
-        all_ok = all(results) if results else True
+        if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
+            try:
+                targets = [self.servos[s]['open'] for s in pair]
+                channels = [self.servos[s]['channel'] for s in pair]
+                # Set target untuk kedua servo dulu
+                for ch, ang in zip(channels, targets):
+                    self.kit.servo[ch].angle = ang
+                # Tunggu gerakan selesai
+                movement_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
+                time.sleep(movement_time)
+                # Hold
+                hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
+                if hold_time and hold_time > 0:
+                    time.sleep(hold_time)
+                # Detach keduanya untuk hilangkan jitter
+                if getattr(config, 'SERVO_STOP_JITTER', True):
+                    for ch in channels:
+                        try:
+                            self.kit.servo[ch].angle = None
+                        except Exception:
+                            pass
+                results = [True, True]
+            except Exception as e:
+                print(f"[5ServoHW] Sync move ({side}) failed: {e}")
+                # Fallback ke per-servo
+                for sid in pair:
+                    if sid in self.servos:
+                        results.append(self._move_servo(sid, self.servos[sid]['open']))
+        else:
+            for sid in pair:
+                if sid in self.servos:
+                    results.append(self._move_servo(sid, self.servos[sid]['open']))
+        all_ok = all(results) if results else False
         if all_ok:
             time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
-            print("[5ServoHW] ✓ All doors opened")
+            print(f"[5ServoHW] ✓ {side.upper()} doors opened")
         else:
-            print(f"[5ServoHW] ⚠ Door open issue: {results}")
+            print(f"[5ServoHW] ⚠ {side.upper()} door open issue: {results}")
         return all_ok
 
     def close_doors(self):
-        print("[5ServoHW] Closing Layer 1 doors (all 4 servos)...")
-        # Ubah sudut tutup pintu di: config.py → SERVO_LAYER1_*_CLOSED
+        """Kompatibilitas lama: tutup semua pintu."""
+        left_ok = self.close_side('left')
+        right_ok = self.close_side('right')
+        return left_ok and right_ok
+
+    def close_side(self, side: str):
+        side = side.lower().strip()
+        if side not in ('left', 'right'):
+            print(f"[5ServoHW] Invalid side: {side}")
+            return False
+        pair = ('layer1_left', 'layer1_left2') if side == 'left' else ('layer1_right', 'layer1_right2')
+        print(f"[5ServoHW] Closing Layer 1 doors ({side.upper()} pair: {pair[0]}, {pair[1]})...")
         results = []
-        for sid in ('layer1_left', 'layer1_right', 'layer1_left2', 'layer1_right2'):
-            if sid in self.servos:
-                results.append(self._move_servo(sid, self.servos[sid]['closed']))
-        all_ok = all(results) if results else True
-        if all_ok:
-            print("[5ServoHW] ✓ All doors closed")
+        if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
+            try:
+                targets = [self.servos[s]['closed'] for s in pair]
+                channels = [self.servos[s]['channel'] for s in pair]
+                for ch, ang in zip(channels, targets):
+                    self.kit.servo[ch].angle = ang
+                movement_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
+                time.sleep(movement_time)
+                hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
+                if hold_time and hold_time > 0:
+                    time.sleep(hold_time)
+                if getattr(config, 'SERVO_STOP_JITTER', True):
+                    for ch in channels:
+                        try:
+                            self.kit.servo[ch].angle = None
+                        except Exception:
+                            pass
+                results = [True, True]
+            except Exception as e:
+                print(f"[5ServoHW] Sync close ({side}) failed: {e}")
+                for sid in pair:
+                    if sid in self.servos:
+                        results.append(self._move_servo(sid, self.servos[sid]['closed']))
         else:
-            print(f"[5ServoHW] ⚠ Door close issue: {results}")
+            for sid in pair:
+                if sid in self.servos:
+                    results.append(self._move_servo(sid, self.servos[sid]['closed']))
+        all_ok = all(results) if results else False
+        if all_ok:
+            print(f"[5ServoHW] ✓ {side.upper()} doors closed")
+        else:
+            print(f"[5ServoHW] ⚠ {side.upper()} door close issue: {results}")
         return all_ok
 
     def set_selector(self, angle):
@@ -404,8 +485,10 @@ class FiveServoHardware:
             print(f"[5ServoHW] ✓ Selector locked at {bin_angle}°")
             
             # Phase 2: Open Layer 1 doors - CRITICAL: WAIT FOR COMPLETE STOP
-            print(f"[5ServoHW] PHASE 2 - Opening doors...")
-            if not self.open_doors():
+            # Tentukan sisi pintu berdasarkan bin (BIN A=LEFT, BIN B=RIGHT)
+            door_side = 'left' if str(bin_assignment).strip().upper() == 'BIN A' else 'right'
+            print(f"[5ServoHW] PHASE 2 - Opening {door_side.upper()} doors...")
+            if not self.open_side(door_side):
                 print("[5ServoHW] ✗ ABORT: Door open failed")
                 return False
             print(f"[5ServoHW] ✓ Doors fully open and stopped")
@@ -417,8 +500,8 @@ class FiveServoHardware:
             print(f"[5ServoHW] ✓ Waste routed to {bin_assignment}")
             
             # Phase 4: Close doors and reset selector - CRITICAL: SEQUENTIAL STOP
-            print(f"[5ServoHW] PHASE 4 - Closing doors...")
-            if not self.close_doors():
+            print(f"[5ServoHW] PHASE 4 - Closing {door_side.upper()} doors...")
+            if not self.close_side(door_side):
                 print("[5ServoHW] ✗ WARNING: Door close failed (attempting recovery)")
             
             # Extra safety delay setelah pintu tutup
