@@ -121,59 +121,85 @@ def print_banner():
 def main():
     """Main function untuk menjalankan aplikasi."""
     
+    # CRITICAL: Auto-detect dan auto-install missing dependencies
+    import platform
+    import subprocess
+    import os
+    
+    missing_deps = []
+    
+    # Check semua dependencies penting
+    try:
+        import cv2
+    except ModuleNotFoundError:
+        missing_deps.append('opencv')
+    
+    try:
+        from adafruit_servokit import ServoKit
+    except (ModuleNotFoundError, NotImplementedError):
+        # NotImplementedError normal di macOS (adafruit-blinka hanya untuk Linux)
+        if platform.system() == 'Linux':
+            missing_deps.append('servokit')
+    
+    # Auto-fix jika ada yang missing di Raspberry Pi
+    if missing_deps and platform.system() == 'Linux':
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                if 'Raspberry Pi' in f.read():
+                    print("="*70)
+                    print(f"⚠️  Dependencies tidak ditemukan: {', '.join(missing_deps)}")
+                    print("="*70)
+                    print("📍 Raspberry Pi detected - Auto-fixing...")
+                    
+                    # Check venv system-site-packages
+                    venv_pyvenv = os.path.join(os.path.dirname(sys.executable), '..', 'pyvenv.cfg')
+                    has_system_packages = False
+                    if os.path.exists(venv_pyvenv):
+                        with open(venv_pyvenv, 'r') as f:
+                            if 'include-system-site-packages = true' in f.read():
+                                has_system_packages = True
+                    
+                    # Fix venv jika perlu
+                    if 'opencv' in missing_deps and not has_system_packages:
+                        print("⚠️  Venv tidak punya akses ke system packages!")
+                        print("🔧 Recreating venv with --system-site-packages...")
+                        
+                        venv_dir = os.path.join(os.getcwd(), '.venv')
+                        if os.path.exists(venv_dir):
+                            import shutil
+                            shutil.rmtree(venv_dir)
+                        
+                        subprocess.run(['python3', '-m', 'venv', '--system-site-packages', '.venv'], check=True)
+                        print("✓ Venv recreated")
+                        print("\n🚀 Please run again: python3 main.py")
+                        return 1
+                    
+                    # Install missing packages
+                    if 'opencv' in missing_deps:
+                        print("⚙️  Installing python3-opencv...")
+                        subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
+                        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-opencv'], check=False)
+                    
+                    if 'servokit' in missing_deps:
+                        print("⚙️  Installing adafruit-servokit...")
+                        subprocess.run([sys.executable, '-m', 'pip', 'install', 
+                                      'adafruit-blinka', 
+                                      'adafruit-circuitpython-pca9685', 
+                                      'adafruit-circuitpython-servokit'], check=True)
+                    
+                    print("\n✓ Dependencies installed. Please run again: python3 main.py")
+                    return 1
+        except Exception as e:
+            print(f"⚠️  Auto-fix error: {e}")
+    
     # CRITICAL: Import dependencies and auto-fix if needed
     try:
         from core.waste_classifier import WasteClassifier
         from core.mock_classifier import MockClassifier
         from core.main_controller import MainController
     except ModuleNotFoundError as e:
-        if 'cv2' in str(e):
-            print(f"\n❌ OpenCV not found: {e}")
-            print("\n🔧 Auto-fixing OpenCV issue...")
-            
-            # Check if on Raspberry Pi
-            import platform
-            import subprocess
-            import os
-            
-            if platform.system() == 'Linux':
-                try:
-                    with open('/proc/cpuinfo', 'r') as f:
-                        if 'Raspberry Pi' in f.read():
-                            print("📍 Raspberry Pi detected")
-                            
-                            # Check if venv has --system-site-packages
-                            venv_pyvenv = os.path.join(os.path.dirname(sys.executable), '..', 'pyvenv.cfg')
-                            has_system_packages = False
-                            if os.path.exists(venv_pyvenv):
-                                with open(venv_pyvenv, 'r') as f:
-                                    if 'include-system-site-packages = true' in f.read():
-                                        has_system_packages = True
-                            
-                            if not has_system_packages:
-                                print("⚠️  Venv tidak punya akses ke system packages!")
-                                print("🔧 Recreating venv with --system-site-packages...")
-                                
-                                # Remove old venv and recreate
-                                venv_dir = os.path.join(os.getcwd(), '.venv')
-                                if os.path.exists(venv_dir):
-                                    import shutil
-                                    shutil.rmtree(venv_dir)
-                                
-                                subprocess.run(['python3', '-m', 'venv', '--system-site-packages', '.venv'], check=True)
-                                print("✓ Venv recreated with system packages access")
-                                print("\n🚀 Please run again: python3 main.py")
-                                return 1
-                            
-                            # Install opencv via apt if not exists
-                            print("⚙️  Installing python3-opencv from apt...")
-                            subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
-                            subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-opencv'], check=False)
-                            print("\n✓ OpenCV installed. Please run again: python3 main.py")
-                            return 1
-                except Exception:
-                    pass
-            
+        if 'cv2' in str(e) or 'adafruit' in str(e):
+            print(f"\n❌ Dependency error: {e}")
             print("\n💡 Quick fix:")
             print("   ./start.sh")
             return 1
