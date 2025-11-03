@@ -276,7 +276,9 @@ TRIGGER_COOLDOWN = 1.0
 # ============================================
 
 # Enable GPS location tracking
-ENABLE_GPS = False
+# Set False untuk menonaktifkan GPS (direkomendasikan untuk RPi 5 jika tidak ada modul GPS)
+# GPS tidak wajib untuk operasi sistem - hanya untuk logging lokasi
+ENABLE_GPS = False  # Default: False (disabled)
 
 # GPS update interval (detik)
 # Default: 300 (5 menit) untuk production, bisa lebih frequent untuk testing

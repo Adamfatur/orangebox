@@ -122,6 +122,7 @@ class MainController:
         # Location service (GPS/coordinates)
         self.location_service = None
         self.enable_gps = getattr(config, 'ENABLE_GPS', False)
+        
         if self.enable_gps:
             try:
                 from core.location_service import LocationService
@@ -139,11 +140,15 @@ class MainController:
                 self.save_gps_history = getattr(config, 'GPS_SAVE_HISTORY', True)
                 self.gps_history_file = getattr(config, 'GPS_HISTORY_FILE', 'location_history.jsonl')
                 
-                print("[MainController] GPS/Location service initialized")
+                print("[MainController] ✓ GPS/Location service initialized")
             except Exception as e:
-                print(f"[MainController] Warning: Could not initialize GPS service: {e}")
+                print(f"[MainController] ⚠️  GPS initialization failed: {e}")
+                print("[MainController] ℹ️  Continuing without GPS service...")
                 self.location_service = None
                 self.enable_gps = False
+        else:
+            print("[MainController] ℹ️  GPS disabled (ENABLE_GPS=False in config.py)")
+            self.save_gps_history = False
         
         # Database service (MySQL RDS)
         self.database_service = None
