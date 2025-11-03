@@ -672,18 +672,22 @@ class MainController:
         # Save to database
         if self.database_service:
             try:
-                location = self.location_service.get_location() if self.location_service else None
-                
-                # Insert location first
+                # Get location only if GPS enabled
+                location = None
                 location_id = None
-                if location:
-                    location_id = self.database_service.insert_location(
-                        latitude=location['latitude'],
-                        longitude=location['longitude'],
-                        accuracy=location.get('accuracy'),
-                        device_id=self.device_id,
-                        source=location.get('source', 'unknown')
-                    )
+                
+                if self.location_service:
+                    location = self.location_service.get_location()
+                    
+                    # Insert location first if available
+                    if location:
+                        location_id = self.database_service.insert_location(
+                            latitude=location['latitude'],
+                            longitude=location['longitude'],
+                            accuracy=location.get('accuracy'),
+                            device_id=self.device_id,
+                            source=location.get('source', 'unknown')
+                        )
                 
                 # Determine bin assignment
                 if label.upper() == 'ORGANIC':
@@ -693,7 +697,7 @@ class MainController:
                     bin_assignment = 'BIN B'
                     bin_angle = 90
                 
-                # Insert analysis result
+                # Insert analysis result (location fields will be NULL if GPS disabled)
                 self.database_service.insert_analysis_result(
                     label=label,
                     confidence=confidence,
@@ -706,7 +710,7 @@ class MainController:
                     location_id=location_id
                 )
             except Exception as e:
-                print(f"[MainController] Warning: Database insert failed: {e}")
+                print(f"[MainController] ⚠️  Database insert failed: {e}")
         
         # Tampilkan hasil di frame (sebelum sorting)
         status_info = {

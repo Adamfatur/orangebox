@@ -327,7 +327,9 @@ GPS_USE_GPSD = True                    # Use GPSD daemon (install: sudo apt-get 
 # ============================================
 
 # Enable database logging
-ENABLE_DATABASE = False
+# Note: Database dapat menyimpan data tanpa GPS (location fields akan NULL)
+# GPS disabled tetap bisa logging ke database untuk analisis jumlah sampah
+ENABLE_DATABASE = False  # Default: False (disabled)
 
 # MySQL RDS Configuration
 DB_HOST = 'orangebox.csxenzvznekp.ap-southeast-3.rds.amazonaws.com'
