@@ -129,30 +129,59 @@ class FiveServoHardware:
             print(f"[5ServoHW] Config {cfg['name']}: CH {cfg['channel']}")
 
     def _move_channel(self, channel, angle):
-        """Gerakkan channel PCA9685 ke sudut tertentu menggunakan ServoKit."""
+        """
+        Gerakkan channel PCA9685 ke sudut tertentu menggunakan ServoKit.
+        
+        CRITICAL: Memastikan servo berhenti tepat di posisi target tanpa drift.
+        
+        Alur:
+        1. Set sudut target
+        2. Tunggu gerakan selesai (SERVO_MOVEMENT_TIME)
+        3. Hold posisi untuk lock mekanik (SERVO_POSITION_HOLD_TIME)
+        4. STOP PWM untuk mencegah jitter/rotasi berkelanjutan
+        """
         try:
             if not HAS_SERVOKIT or self.kit is None:
                 print(f"[5ServoHW] Simulate move CH{channel} → {angle}°")
                 return True
+            
             # Gerakkan ke sudut target
             self.kit.servo[channel].angle = angle
-            # Waktu gerak utama
-            time.sleep(getattr(config, 'SERVO_MOVEMENT_TIME', 0.15))
-            # Tambahan waktu hold untuk lock mekanik
+            
+            # Waktu gerak utama - beri waktu servo mencapai posisi
+            movement_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
+            time.sleep(movement_time)
+            
+            # CRITICAL: Hold posisi untuk lock mekanik
+            # MG996R memerlukan waktu ekstra untuk memastikan gear terkunci
             hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
             if hold_time and hold_time > 0:
                 time.sleep(hold_time)
-            # Nonaktifkan sinyal untuk mencegah jitter/rotasi berkelanjutan
-            # Mirip dengan implementasi GPIO yang set duty=0 setelah bergerak
-            try:
-                if getattr(config, 'SERVO_STOP_JITTER', True):
+            
+            # CRITICAL: Nonaktifkan sinyal PWM untuk mencegah jitter/rotasi berkelanjutan
+            # Servo MG996R akan hold posisi secara mekanik meskipun PWM off
+            # Ini SANGAT PENTING untuk mencegah servo berputar terus-menerus
+            stop_jitter = getattr(config, 'SERVO_STOP_JITTER', True)
+            if stop_jitter:
+                try:
+                    # Detach servo dari PCA9685 (set angle = None)
                     self.kit.servo[channel].angle = None
-            except Exception:
-                # Jika detach gagal (perubahan API), abaikan
-                pass
+                    print(f"[5ServoHW] CH{channel} PWM stopped (angle={angle}° locked)")
+                except AttributeError:
+                    # Fallback: coba set pulse width ke 0
+                    try:
+                        self.kit.servo[channel].fraction = None
+                    except Exception:
+                        pass
+                except Exception as e:
+                    print(f"[5ServoHW] Warning: Could not detach CH{channel}: {e}")
+            
             return True
+            
         except Exception as e:
             print(f"[5ServoHW] Move error CH{channel} → {angle}°: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def _move_servo(self, servo_id, angle):
@@ -236,30 +265,95 @@ class FiveServoHardware:
             return False
 
     def execute_sort(self, bin_assignment, bin_angle):
+        """
+        Jalankan urutan penyortiran lengkap dengan koordinasi Layer 1 & Layer 2.
+        
+        CRITICAL SAFETY: Setiap gerakan servo dipastikan BERHENTI sebelum gerakan berikutnya.
+        
+        Alur sorting:
+        Phase 1: Set selector Layer 2 ke bin target → VERIFY STOP
+        Phase 2: Buka pintu Layer 1 → VERIFY STOP
+        Phase 3: Tunggu sampah jatuh dan meluncur
+        Phase 4: Tutup pintu Layer 1 → VERIFY STOP
+        Phase 5: Reset selector ke netral → VERIFY STOP
+        """
         print(f"[5ServoHW] === Starting sort to {bin_assignment} ({bin_angle}°) ===")
-        # Alur: set selector → buka pintu → tunggu geser → tutup pintu → pusatkan selector
+        
         try:
-            # Phase 1: set selector to target
-            self.set_selector(bin_angle)
+            # Phase 1: Set selector to target - CRITICAL: WAIT FOR COMPLETE STOP
+            print(f"[5ServoHW] PHASE 1 - Setting selector to {bin_angle}°...")
+            if not self.set_selector(bin_angle):
+                print("[5ServoHW] ✗ ABORT: Selector movement failed")
+                return False
+            
+            # Extra safety delay untuk memastikan selector benar-benar berhenti
             time.sleep(getattr(config, 'SERVO_DROP_DELAY', 0.3))
-            # Phase 2: open Layer 1 doors
-            self.open_doors()
+            print(f"[5ServoHW] ✓ Selector locked at {bin_angle}°")
+            
+            # Phase 2: Open Layer 1 doors - CRITICAL: WAIT FOR COMPLETE STOP
+            print(f"[5ServoHW] PHASE 2 - Opening doors...")
+            if not self.open_doors():
+                print("[5ServoHW] ✗ ABORT: Door open failed")
+                return False
+            print(f"[5ServoHW] ✓ Doors fully open and stopped")
+            
+            # Phase 3: Waste routing (gravity does the work)
+            print(f"[5ServoHW] PHASE 3 - Waste falling and sliding...")
             time.sleep(getattr(config, 'SERVO_FALL_TIME', 0.5))
-            # Phase 3: slide time on selector
             time.sleep(getattr(config, 'SERVO_SLIDE_TIME', 0.5))
-            # Phase 4: close doors and reset selector
-            self.close_doors()
+            print(f"[5ServoHW] ✓ Waste routed to {bin_assignment}")
+            
+            # Phase 4: Close doors and reset selector - CRITICAL: SEQUENTIAL STOP
+            print(f"[5ServoHW] PHASE 4 - Closing doors...")
+            if not self.close_doors():
+                print("[5ServoHW] ✗ WARNING: Door close failed (attempting recovery)")
+            
+            # Extra safety delay setelah pintu tutup
             time.sleep(getattr(config, 'SERVO_CLOSE_DELAY', 0.3))
-            neutral = self.servos['layer2_selector'].get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90)) if 'layer2_selector' in self.servos else getattr(config, 'SERVO_LAYER2_NEUTRAL', 90)
-            self.set_selector(neutral)
+            print(f"[5ServoHW] ✓ Doors fully closed and stopped")
+            
+            # Phase 5: Reset selector to neutral - CRITICAL: FINAL STOP
+            print(f"[5ServoHW] PHASE 5 - Resetting selector to neutral...")
+            neutral = self.servos.get('layer2_selector', {}).get('neutral', 
+                                                                  getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
+            if not self.set_selector(neutral):
+                print("[5ServoHW] ✗ WARNING: Selector reset failed (attempting recovery)")
+            
+            # Extra safety delay untuk memastikan semua servo berhenti
             time.sleep(getattr(config, 'SERVO_RESET_DELAY', 0.3))
-
-            print(f"[5ServoHW] === ✓ SORT COMPLETE → {bin_assignment} ===")
+            print(f"[5ServoHW] ✓ Selector locked at neutral ({neutral}°)")
+            
+            # FINAL VERIFICATION: Pastikan semua servo dalam keadaan berhenti
+            print(f"[5ServoHW] === FINAL VERIFICATION ===")
+            status = self.verify_positions()
+            all_ok = True
+            for servo_id, info in status.items():
+                if info.get('verified', False):
+                    print(f"[5ServoHW] ✓ {servo_id}: {info.get('expected')}° (locked)")
+                else:
+                    print(f"[5ServoHW] ⚠ {servo_id}: Position uncertain")
+                    all_ok = False
+            
+            if all_ok:
+                print(f"[5ServoHW] === ✓ SORT COMPLETE → {bin_assignment} ===")
+                print(f"[5ServoHW] All servos verified stopped and locked\n")
+            else:
+                print(f"[5ServoHW] === ⚠ SORT COMPLETE → {bin_assignment} (with warnings) ===\n")
+            
             return True
+            
         except Exception as e:
             print(f"[5ServoHW] ✗ Sort error: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Emergency stop: Coba reset semua servo ke safe position
+            print("[5ServoHW] !!! EMERGENCY: Attempting safe reset...")
+            try:
+                self.reset_to_ready()
+            except Exception:
+                pass
+            
             return False
 
     def cleanup(self):

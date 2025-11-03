@@ -222,8 +222,9 @@ SERVO_CLOSE_DELAY = 0.3         # Delay after closing doors (safety)
 SERVO_RESET_DELAY = 0.3         # Delay after selector returns to neutral
 
 # Servo movement control
+# CRITICAL: SERVO_STOP_JITTER HARUS True untuk mencegah servo berputar terus-menerus!
 SERVO_MOVEMENT_TIME = 0.15      # Time for servo to reach target angle (seconds)
-SERVO_STOP_JITTER = True        # Set duty to 0 after movement (prevent jitter/vibration)
+SERVO_STOP_JITTER = True        # ⚠️ PENTING: Set duty to 0 after movement (prevent continuous rotation)
 SERVO_PWM_FREQUENCY = 50        # PWM frequency (Hz) - standard for MG996R
 SERVO_POSITION_HOLD_TIME = 0.05 # Extra hold time to ensure mechanical lock (seconds)
 SERVO_POSITION_TOLERANCE = 2    # Acceptable position error in degrees (for verification)

@@ -290,15 +290,16 @@ class GpioServoHardware:
                 hold_time = getattr(config, 'SERVO_POSITION_HOLD_TIME', 0.05)
                 time.sleep(hold_time)  # Extra hold time
                 
-                # Stop PWM to prevent jitter/vibration and reduce power consumption
+                # CRITICAL: Stop PWM to prevent jitter/vibration and reduce power consumption
                 # MG996R will hold position mechanically even with PWM off
                 # Prevent jitter/vibration: `SERVO_STOP_JITTER` in config.py
                 stop_jitter = getattr(config, 'SERVO_STOP_JITTER', True)
                 if stop_jitter:
                     servo['pwm'].ChangeDutyCycle(0)
-                
-                # Log position change for verification
-                print(f"[3ServoHW] {servo_id}: {old_angle}° → {angle}° ✓")
+                    print(f"[GPIOServo] {servo_id}: {old_angle}° → {angle}° ✓ (PWM STOPPED)")
+                else:
+                    print(f"[GPIOServo] {servo_id}: {old_angle}° → {angle}° ✓ (PWM ACTIVE - may jitter)")
+                    print(f"[GPIOServo] ⚠️ WARNING: SERVO_STOP_JITTER is False - servo may rotate continuously!")
                 
                 return True
             return False
