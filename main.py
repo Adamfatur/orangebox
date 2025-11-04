@@ -274,52 +274,11 @@ def main():
         except Exception as e:
             print(f"⚠️  Auto-fix error: {e}")
     
-    # Tambahan auto-fix khusus Raspberry Pi untuk TFLite dan Database
+    # Raspberry Pi extras (lightweight): ensure pymysql exists; do NOT force tflite-runtime install
     if platform.system() == 'Linux':
         try:
             with open('/proc/cpuinfo', 'r') as f:
                 if 'Raspberry Pi' in f.read():
-                    # tflite-runtime (prefer apt; fallback to pip; if Python >=3.12, fallback to Python 3.11 venv)
-                    try:
-                        import tflite_runtime.interpreter as _tfl
-                    except Exception:
-                        print("⚙️  Installing tflite-runtime (apt)...")
-                        apt_ok = subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-tflite-runtime'], capture_output=True, text=True).returncode == 0
-                        if not apt_ok:
-                            print("⚠️  python3-tflite-runtime not available via apt. Trying pip...")
-                            pip_ok = subprocess.run([sys.executable, '-m', 'pip', 'install', 'tflite-runtime'], capture_output=True, text=True).returncode == 0
-                            try:
-                                import tflite_runtime.interpreter as _tfl2  # noqa: F401
-                                pip_ok = True
-                            except Exception:
-                                pip_ok = False
-                            if not pip_ok:
-                                # If running on Python >=3.12, try creating venv with Python 3.11 and re-launch
-                                if sys.version_info >= (3,12):
-                                    print("⚠️  tflite-runtime wheel likely unavailable for Python>=3.12.")
-                                    print("🔧 Attempting to install Python 3.11 and recreate venv...")
-                                    subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
-                                    subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3.11', 'python3.11-venv'], check=False)
-                                    # Check python3.11 path
-                                    py311 = '/usr/bin/python3.11'
-                                    if os.path.exists(py311):
-                                        try:
-                                            venv_dir = os.path.join(os.getcwd(), '.venv')
-                                            if os.path.exists(venv_dir):
-                                                import shutil
-                                                shutil.rmtree(venv_dir)
-                                            subprocess.run([py311, '-m', 'venv', '--system-site-packages', '.venv'], check=True)
-                                            print("✓ Recreated venv with Python 3.11")
-                                            print("\n🚀 Please run again: python3 main.py")
-                                            return 1
-                                        except Exception as _e:
-                                            print(f"❌ Failed to recreate venv with Python 3.11: {_e}")
-                                    else:
-                                        print("❌ Python 3.11 not found on system. Please install it manually or use TEST mode.")
-                                else:
-                                    print("❌ Failed to install tflite-runtime via pip.")
-                    
-                    # pymysql untuk database logging
                     try:
                         import pymysql  # noqa: F401
                     except Exception:

@@ -134,11 +134,15 @@ class HardwareInterface:
         Using OpenCV fallback for stability.
         """
         
-        # TEMPORARY FIX: Skip PiCamera2 to avoid segfault
-        # Use OpenCV for USB camera directly
-        use_opencv_only = True
-        
-        if not use_opencv_only and Picamera2 is not None:
+        # Decide backend based on detection result
+        use_picamera = False
+        try:
+            if getattr(self, 'camera_config', None) and self.camera_config.get('type') == 'picamera' and Picamera2 is not None:
+                use_picamera = True
+        except Exception:
+            use_picamera = False
+
+        if use_picamera:
             try:
                 print("[HardwareInterface] Initializing PiCamera2...")
                 self.camera = Picamera2()
@@ -190,7 +194,7 @@ class HardwareInterface:
                 except:
                     pass
         else:
-            print("[HardwareInterface] Using OpenCV for camera detection")
+            print("[HardwareInterface] Using OpenCV (USB/V4L2) for camera")
         
         # Use OpenCV for USB webcam (more stable)
         try:
@@ -200,7 +204,11 @@ class HardwareInterface:
             cam_idx = self.camera_index if self.camera_index is not None else 0
             
             print(f"[HardwareInterface] Opening camera at index {cam_idx}...")
-            self.camera = cv2.VideoCapture(cam_idx)
+            # Prefer V4L2 backend to avoid GStreamer issues on RPi
+            self.camera = cv2.VideoCapture(cam_idx, cv2.CAP_V4L2)
+            if not self.camera.isOpened():
+                # Fallback to default backend
+                self.camera = cv2.VideoCapture(cam_idx)
             
             if not self.camera.isOpened():
                 # Try other indices
@@ -209,7 +217,9 @@ class HardwareInterface:
                     if idx == cam_idx:
                         continue
                     print(f"[HardwareInterface]   Trying index {idx}...")
-                    self.camera = cv2.VideoCapture(idx)
+                    self.camera = cv2.VideoCapture(idx, cv2.CAP_V4L2)
+                    if not self.camera.isOpened():
+                        self.camera = cv2.VideoCapture(idx)
                     if self.camera.isOpened():
                         cam_idx = idx
                         break

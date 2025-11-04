@@ -55,24 +55,47 @@ class WasteClassifier:
         except Exception:
             pass
 
-        # Prefer tflite_runtime (APT package di Raspberry Pi)
+        # Prefer tflite_runtime (APT package di Raspberry Pi); fallback to TensorFlow Lite
+        load_errors = []
+        self.interpreter = None
+        
+        # Option A: tflite_runtime (lightweight)
         try:
             print("[WasteClassifier] Trying tflite_runtime...")
             import tflite_runtime.interpreter as tflite
             self.interpreter = tflite.Interpreter(model_path=self.model_path)
-            try:
-                # Konservatif: 1 thread untuk kestabilan di perangkat kecil
-                self.interpreter.set_num_threads(1)
-            except Exception:
-                pass
             print("[WasteClassifier] ✓ Using tflite_runtime")
         except Exception as e:
-            # Jangan import tensorflow di proses utama pada RPi → arahkan pengguna instal tflite-runtime
+            load_errors.append(f"tflite_runtime: {e}")
+        
+        # Option B: TensorFlow's bundled TFLite (heavier but widely available)
+        if self.interpreter is None:
+            try:
+                print("[WasteClassifier] Trying TensorFlow Lite (tensorflow.lite)...")
+                try:
+                    from tensorflow.lite import Interpreter  # TF >= 2.11
+                except Exception:
+                    # Fallback older API path
+                    from tensorflow.lite.python.interpreter import Interpreter  # type: ignore
+                self.interpreter = Interpreter(model_path=self.model_path)
+                print("[WasteClassifier] ✓ Using tensorflow.lite Interpreter")
+            except Exception as e:
+                load_errors.append(f"tensorflow.lite: {e}")
+        
+        if self.interpreter is None:
+            detail = " | ".join(load_errors)
             raise RuntimeError(
-                "Tidak dapat memuat TFLite interpreter. Harap instal tflite-runtime (disarankan di Raspberry Pi):\n"
-                "  sudo apt update && sudo apt install -y python3-tflite-runtime\n"
-                f"Detail: {e}"
+                "Tidak dapat memuat TFLite interpreter. Coba salah satu opsi berikut:\n"
+                "  1) Install tflite-runtime (lebih ringan): sudo apt install -y python3-tflite-runtime\n"
+                "  2) Gunakan TensorFlow Lite (sudah terpasang di requirements)\n"
+                f"Detail: {detail}"
             )
+        
+        # Konservatif: set num_threads jika tersedia
+        try:
+            self.interpreter.set_num_threads(1)
+        except Exception:
+            pass
 
         # Alokasi tensors
         print("[WasteClassifier] Allocating tensors...")
