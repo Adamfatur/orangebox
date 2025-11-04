@@ -526,9 +526,11 @@ python3 scripts/verify_no_conflicts.py
 orangebox/
 ├── main.py                 # Entry point (auto-fix venv)
 ├── config.py              # Konfigurasi 7-servo system
-├── install.sh             # Auto installer
+├── install.sh             # Auto installer (MAIN)
 ├── start.sh               # Quick start script
 ├── requirements.txt       # Python dependencies
+├── README.md              # Dokumentasi lengkap
+├── QUICK_START.md         # Quick start guide
 │
 ├── src/
 │   ├── core/
@@ -541,7 +543,7 @@ orangebox/
 │   └── hardware/
 │       ├── hardware_interface_rpi.py    # RPi hardware
 │       ├── hardware_interface_mock.py   # macOS mock
-│       └── seven_servo_hardware.py      # 7-servo system (NEW!)
+│       └── seven_servo_hardware.py      # 7-servo system
 │
 ├── models/
 │   ├── model_quant_infer.tflite    # Quantized model
@@ -563,9 +565,25 @@ orangebox/
 │   ├── health-check.sh             # Health monitoring
 │   └── uninstall.sh                # Remove service
 │
-└── tools/
-    ├── test_model_accuracy.py      # Model accuracy testing
-    └── train_model.py              # Custom model training
+├── tools/
+│   ├── test_model_accuracy.py      # Model accuracy testing
+│   └── train_model.py              # Custom model training
+│
+├── utils/
+│   ├── run_mac.py                  # macOS runner (bypass venv check)
+│   ├── fix_venv.sh                 # Fix venv issues
+│   └── setup.sh                    # Setup wizard (alternative)
+│
+├── data/
+│   ├── location_history.jsonl      # GPS history log
+│   └── device_config.txt           # Device configuration
+│
+├── docs_archive/
+│   ├── CLEANUP_SUMMARY.md          # Cleanup documentation
+│   └── SUMMARY_v1.2.txt            # Audit report
+│
+└── .backup/
+    └── config.py.backup            # Config backup
 ```
 
 ## 🎯 Fitur 7-Servo System
