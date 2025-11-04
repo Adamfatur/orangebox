@@ -114,12 +114,14 @@ class HardwareInterface:
                     self.camera_index = camera_info['index']
                     print(f"[HardwareInterface] ✓ Selected: {camera_info['name']} (index {self.camera_index})")
             else:
-                print("[HardwareInterface] ⚠ No camera detected, defaulting to index 0")
+                print("[HardwareInterface] ⚠️  No camera detected")
+                print("[HardwareInterface] System will attempt to use index 0")
+                print("[HardwareInterface] If camera fails, check connection and reboot")
                 self.camera_index = 0
                 
         except Exception as e:
-            print(f"[HardwareInterface] Camera auto-detection failed: {e}")
-            print("[HardwareInterface] Defaulting to camera index 0")
+            print(f"[HardwareInterface] ⚠️  Camera auto-detection error: {e}")
+            print("[HardwareInterface] Attempting fallback to index 0")
             self.camera_index = 0
 
     

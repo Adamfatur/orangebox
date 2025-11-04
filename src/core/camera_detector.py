@@ -47,19 +47,60 @@ class CameraDetector:
         """Check if picamera2 is available (Raspberry Pi Camera Module)"""
         try:
             from picamera2 import Picamera2
-            # Try to detect if camera module is connected
+            
+            # Method 1: Try to list cameras via global_camera_info
             try:
-                test_cam = Picamera2()
-                test_cam.close()
-                self.has_picamera2 = True
-                print("[CameraDetector] ✓ Raspberry Pi Camera Module detected (picamera2)")
-                return True
-            except Exception as e:
-                print(f"[CameraDetector] Picamera2 available but no camera module detected: {e}")
-                return False
-        except ImportError:
-            print("[CameraDetector] picamera2 not installed")
+                cameras = Picamera2.global_camera_info()
+                if cameras and len(cameras) > 0:
+                    self.has_picamera2 = True
+                    print(f"[CameraDetector] ✓ Raspberry Pi Camera Module detected")
+                    return True
+                else:
+                    print("[CameraDetector] ⚠️  Picamera2 installed but no camera detected")
+                    self._show_camera_help()
+                    return False
+            except Exception as e1:
+                # Method 2: Try to create instance (fallback)
+                try:
+                    test_cam = Picamera2()
+                    test_cam.close()
+                    self.has_picamera2 = True
+                    print("[CameraDetector] ✓ Raspberry Pi Camera Module detected")
+                    return True
+                except Exception as e2:
+                    print(f"[CameraDetector] ⚠️  Camera detection failed: {e2}")
+                    self._show_camera_help()
+                    return False
+                    
+        except ImportError as e:
+            print(f"[CameraDetector] ⚠️  picamera2 not installed")
+            print("[CameraDetector] Installing picamera2...")
+            try:
+                import subprocess
+                subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-picamera2'], 
+                             check=False, capture_output=True)
+                print("[CameraDetector] ℹ️  Please restart the application")
+            except:
+                print("[CameraDetector] 💡 Install manually: sudo apt install python3-picamera2")
             return False
+    
+    def _show_camera_help(self):
+        """Show helpful message when camera not detected"""
+        print("")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("📷 Raspberry Pi Camera Module Not Detected")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("")
+        print("Quick Fix:")
+        print("  1. Check physical connection (ribbon cable)")
+        print("  2. Enable camera: sudo raspi-config")
+        print("     → Interface Options → Camera → Enable")
+        print("  3. Reboot: sudo reboot")
+        print("  4. Test: libcamera-hello")
+        print("")
+        print("System will fallback to USB webcam if available...")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("")
     
     def detect_cameras(self, max_cameras: int = 5) -> list:
         """
@@ -122,7 +163,14 @@ class CameraDetector:
         cameras = self.detect_cameras()
         
         if not cameras:
-            print("[CameraDetector] ✗ No cameras detected!")
+            print("[CameraDetector] ❌ No cameras detected!")
+            if self.is_raspberry_pi:
+                print("")
+                print("💡 Troubleshooting:")
+                print("   - Pi Camera: Check connection and run 'libcamera-hello'")
+                print("   - USB Camera: Check with 'v4l2-ctl --list-devices'")
+                print("   - Enable camera: sudo raspi-config → Interface → Camera")
+                print("")
             return None
         
         # Select camera based on platform
