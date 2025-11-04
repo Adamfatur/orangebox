@@ -247,7 +247,14 @@ SERVO_LAYER1_OPEN_BOTH_SIDES = True
 # 0 = semua start bersamaan (butuh PSU kuat, mungkin inkonsisten)
 # 8-12 = staggered start, lebih stabil di PSU terbatas, masih terlihat hampir bersamaan
 # >20 = mulai terlihat berurutan
-SERVO_STAGGER_DELAY_MS = 10
+SERVO_STAGGER_DELAY_MS = 0
+
+# Layer 1 Safety & Calibration
+# Aktifkan soft limits agar servo Layer 1 HANYA bergerak di antara CLOSED dan OPEN
+SERVO_L1_SOFT_LIMITS_ENABLE = True
+# Gunakan overshoot kecil saat mencapai titik OPEN/CLOSED untuk menghilangkan backlash
+SERVO_L1_USE_OVERSHOOT = True
+SERVO_L1_OVERSHOOT_DEG = 3
 
 # ============================================
 # LAYER 2 - PEMILAH (1 Servo)
@@ -256,7 +263,8 @@ SERVO_STAGGER_DELAY_MS = 10
 
 # 🎯 Servo Pemilah
 SERVO_LAYER2_SELECTOR_PIN = 18      # Pin GPIO (kalau pakai GPIO)
-SERVO_LAYER2_SELECTOR_CHANNEL = None   # Set ke None untuk disable (nanti bisa pakai CH 4 atau 5)
+# Aktifkan Layer 2 di channel PCA9685 yang kosong (0-3 dipakai Layer 1)
+SERVO_LAYER2_SELECTOR_CHANNEL = 4   # Gunakan channel 4 (ubah sesuai wiring Anda)
 # ⚠️  Layer 2 belum ada servo fisik, tapi tetap di-simulasi di kode
 # ⚠️  Nanti kalau mau tambah, set SERVO_LAYER2_SELECTOR_CHANNEL = 4 (atau channel lain yang kosong)
 SERVO_LAYER2_BIN_A = 60             # Derajat untuk Bin A / Organik (misal: miring kiri 30°)
@@ -274,6 +282,12 @@ SERVO_LAYER2_NEUTRAL_OVERSHOOT_DEG = 3
 SERVO_LAYER2_SETTLE_TIME = 0.15
 # Setelah tilt, selalu kembali ke netral?
 SERVO_LAYER2_RETURN_AFTER_TILT = True
+
+# Akurasi tilt (opsional)
+# Overshoot kecil untuk menghilangkan backlash saat berhenti di sudut tilt
+SERVO_LAYER2_TILT_OVERSHOOT_DEG = 3
+# Berapa lama berhenti di sudut tilt sebelum kembali (detik)
+SERVO_LAYER2_TILT_HOLD_TIME = 0.3
 
 # ============================================
 # TIMING - Atur Kecepatan Gerakan

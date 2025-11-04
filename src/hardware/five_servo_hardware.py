@@ -302,11 +302,57 @@ class FiveServoHardware:
             print(f"[5ServoHW] Unknown servo id: {servo_id}")
             return False
         cfg = self.servos[servo_id]
-        ok = self._move_channel(cfg['channel'], angle)
+        # Soft-limit enforcement for Layer 1 (doors)
+        target_angle = angle
+        try:
+            if getattr(config, 'SERVO_L1_SOFT_LIMITS_ENABLE', True) and servo_id.startswith('layer1_'):
+                c = int(cfg.get('closed', 0))
+                o = int(cfg.get('open', 90))
+                lo, hi = (c, o) if c <= o else (o, c)
+                # Clamp to configured closed/open range and absolute [0,180]
+                target_angle = max(0, min(180, max(lo, min(hi, int(angle)))))
+                if target_angle != angle:
+                    print(f"[5ServoHW] ⛑ Clamp {servo_id}: {angle}° → {target_angle}° within [{lo},{hi}]")
+        except Exception:
+            # Fallback: ensure within [0,180]
+            target_angle = max(0, min(180, int(angle)))
+
+        ok = self._move_channel(cfg['channel'], target_angle)
         if ok:
-            cfg['current_angle'] = angle
+            cfg['current_angle'] = target_angle
             cfg['last_move_time'] = time.time()
         return ok
+
+    # ===== Layer 1 Safety Helpers =====
+    def _l1_bounds(self, servo_id):
+        """Return (closed, open) and (lo, hi) tuple for a Layer 1 servo id.
+        If not Layer 1, returns (0,180) for both pairs.
+        """
+        cfg = self.servos.get(servo_id, {})
+        c = int(cfg.get('closed', 0))
+        o = int(cfg.get('open', 90))
+        lo, hi = (c, o) if c <= o else (o, c)
+        return c, o, lo, hi
+
+    def _l1_overshoot_target(self, servo_id, limit_kind: str, overshoot_deg: int):
+        """Compute an overshoot angle beyond the target limit for backlash removal.
+        limit_kind: 'open' or 'closed'. Returns an angle within [0,180].
+        Note: This may go slightly beyond the configured limit by overshoot_deg.
+        """
+        c, o, lo, hi = self._l1_bounds(servo_id)
+        overshoot = max(0, int(overshoot_deg))
+        if limit_kind == 'open':
+            # Direction: towards open beyond limit
+            if o >= c:
+                return max(0, min(180, o + overshoot))
+            else:
+                return max(0, min(180, o - overshoot))
+        else:  # 'closed'
+            # Direction: towards closed beyond limit
+            if c <= o:
+                return max(0, min(180, c - overshoot))
+            else:
+                return max(0, min(180, c + overshoot))
 
     def _apply_servokit_calibration(self):
         """Kalibrasi ServoKit: set pulse width range dan actuation range untuk semua channel terpakai."""
@@ -424,7 +470,7 @@ class FiveServoHardware:
             if hold and hold > 0:
                 time.sleep(hold)
             
-            # STOP PWM untuk anti-jitter
+            # STOP PWM untuk anti-jitter (kecuali jika kita ingin HOLD secara eksplisit)
             if getattr(config, 'SERVO_STOP_JITTER', True):
                 for ch in channels:
                     try:
@@ -448,6 +494,8 @@ class FiveServoHardware:
                 'timestamp': cfg.get('last_move_time', 0)
             }
         return status
+
+    # (Holding helpers removed per request: focus on tight sync movement)
 
     def open_doors(self):
         """Kompatibilitas lama: buka semua pintu. Tidak disarankan.
@@ -473,22 +521,57 @@ class FiveServoHardware:
         # Jika ServoKit aktif, gerakkan kedua channel secara sinkron 0->open (90) saja;
         # penutupan kembali ke 0° dilakukan terpisah oleh close_side/close_all
         results = []
+        use_overshoot = getattr(config, 'SERVO_L1_USE_OVERSHOOT', True)
+        overshoot_deg = int(getattr(config, 'SERVO_L1_OVERSHOOT_DEG', 3))
         if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
             try:
-                targets = [self.servos[s]['open'] for s in pair]
                 channels = [self.servos[s]['channel'] for s in pair]
-                ok = self._sync_move(channels, targets)
-                results = [ok, ok]
+                finals = []
+                presteps = []
+                for s in pair:
+                    # Clamp target within Layer 1 bounds
+                    _, _, lo, hi = self._l1_bounds(s)
+                    tgt = self.servos[s]['open']
+                    tgt = max(lo, min(hi, tgt))
+                    finals.append(tgt)
+                    if use_overshoot and overshoot_deg > 0:
+                        presteps.append(self._l1_overshoot_target(s, 'open', overshoot_deg))
+                    else:
+                        presteps.append(tgt)
+
+                if use_overshoot and overshoot_deg > 0:
+                    ok1 = self._sync_move(channels, presteps)
+                    # Small settle; sync_move already includes movement/hold
+                    ok2 = self._sync_move(channels, finals) if ok1 else False
+                    results = [ok1 and ok2, ok1 and ok2]
+                else:
+                    ok = self._sync_move(channels, finals)
+                    results = [ok, ok]
             except Exception as e:
                 print(f"[5ServoHW] Sync move ({side}) failed: {e}")
                 # Fallback ke per-servo
                 for sid in pair:
                     if sid in self.servos:
-                        results.append(self._move_servo(sid, self.servos[sid]['open']))
+                        # Per-servo with optional overshoot
+                        final = max(self._l1_bounds(sid)[2], min(self._l1_bounds(sid)[3], self.servos[sid]['open']))
+                        if use_overshoot and overshoot_deg > 0:
+                            pre = self._l1_overshoot_target(sid, 'open', overshoot_deg)
+                            ok1 = self._move_servo(sid, pre)
+                            ok2 = self._move_servo(sid, final) if ok1 else False
+                            results.append(ok1 and ok2)
+                        else:
+                            results.append(self._move_servo(sid, final))
         else:
             for sid in pair:
                 if sid in self.servos:
-                    results.append(self._move_servo(sid, self.servos[sid]['open']))
+                    final = max(self._l1_bounds(sid)[2], min(self._l1_bounds(sid)[3], self.servos[sid]['open']))
+                    if use_overshoot and overshoot_deg > 0:
+                        pre = self._l1_overshoot_target(sid, 'open', overshoot_deg)
+                        ok1 = self._move_servo(sid, pre)
+                        ok2 = self._move_servo(sid, final) if ok1 else False
+                        results.append(ok1 and ok2)
+                    else:
+                        results.append(self._move_servo(sid, final))
         all_ok = all(results) if results else False
         if all_ok:
             time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
@@ -511,21 +594,55 @@ class FiveServoHardware:
         pair = ('layer1_left', 'layer1_left2') if side == 'left' else ('layer1_right', 'layer1_right2')
         print(f"[5ServoHW] Closing Layer 1 doors ({side.upper()} pair: {pair[0]}, {pair[1]})...")
         results = []
+        use_overshoot = getattr(config, 'SERVO_L1_USE_OVERSHOOT', True)
+        overshoot_deg = int(getattr(config, 'SERVO_L1_OVERSHOOT_DEG', 3))
         if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
             try:
-                targets = [self.servos[s]['closed'] for s in pair]
                 channels = [self.servos[s]['channel'] for s in pair]
-                ok = self._sync_move(channels, targets)
-                results = [ok, ok]
+                finals = []
+                presteps = []
+                for s in pair:
+                    _, _, lo, hi = self._l1_bounds(s)
+                    tgt = self.servos[s]['closed']
+                    tgt = max(lo, min(hi, tgt))
+                    finals.append(tgt)
+                    if use_overshoot and overshoot_deg > 0:
+                        presteps.append(self._l1_overshoot_target(s, 'closed', overshoot_deg))
+                    else:
+                        presteps.append(tgt)
+
+                if use_overshoot and overshoot_deg > 0:
+                    ok1 = self._sync_move(channels, presteps)
+                    ok2 = self._sync_move(channels, finals) if ok1 else False
+                    results = [ok1 and ok2, ok1 and ok2]
+                else:
+                    ok = self._sync_move(channels, finals)
+                    results = [ok, ok]
+
+                # Holding disabled (reverted) — PWM will be detached by _sync_move
             except Exception as e:
                 print(f"[5ServoHW] Sync close ({side}) failed: {e}")
                 for sid in pair:
                     if sid in self.servos:
-                        results.append(self._move_servo(sid, self.servos[sid]['closed']))
+                        final = max(self._l1_bounds(sid)[2], min(self._l1_bounds(sid)[3], self.servos[sid]['closed']))
+                        if use_overshoot and overshoot_deg > 0:
+                            pre = self._l1_overshoot_target(sid, 'closed', overshoot_deg)
+                            ok1 = self._move_servo(sid, pre)
+                            ok2 = self._move_servo(sid, final) if ok1 else False
+                            results.append(ok1 and ok2)
+                        else:
+                            results.append(self._move_servo(sid, final))
         else:
             for sid in pair:
                 if sid in self.servos:
-                    results.append(self._move_servo(sid, self.servos[sid]['closed']))
+                    final = max(self._l1_bounds(sid)[2], min(self._l1_bounds(sid)[3], self.servos[sid]['closed']))
+                    if use_overshoot and overshoot_deg > 0:
+                        pre = self._l1_overshoot_target(sid, 'closed', overshoot_deg)
+                        ok1 = self._move_servo(sid, pre)
+                        ok2 = self._move_servo(sid, final) if ok1 else False
+                        results.append(ok1 and ok2)
+                    else:
+                        results.append(self._move_servo(sid, final))
         all_ok = all(results) if results else False
         if all_ok:
             print(f"[5ServoHW] ✓ {side.upper()} doors closed")
@@ -542,16 +659,41 @@ class FiveServoHardware:
         if not pair:
             return False
         print("[5ServoHW] Opening ALL doors in sync...")
+        use_overshoot = getattr(config, 'SERVO_L1_USE_OVERSHOOT', True)
+        overshoot_deg = int(getattr(config, 'SERVO_L1_OVERSHOOT_DEG', 3))
         if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
             channels = [self.servos[s]['channel'] for s in pair]
-            targets = [self.servos[s]['open'] for s in pair]
-            ok = self._sync_move(channels, targets)
+            finals = []
+            presteps = []
+            for s in pair:
+                _, _, lo, hi = self._l1_bounds(s)
+                tgt = self.servos[s]['open']
+                tgt = max(lo, min(hi, tgt))
+                finals.append(tgt)
+                if use_overshoot and overshoot_deg > 0:
+                    presteps.append(self._l1_overshoot_target(s, 'open', overshoot_deg))
+                else:
+                    presteps.append(tgt)
+            if use_overshoot and overshoot_deg > 0:
+                ok1 = self._sync_move(channels, presteps)
+                ok = self._sync_move(channels, finals) if ok1 else False
+            else:
+                ok = self._sync_move(channels, finals)
             if ok:
                 time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
                 print("[5ServoHW] ✓ ALL doors opened")
             return ok
         # Fallback per-servo
-        results = [self._move_servo(s, self.servos[s]['open']) for s in pair]
+        results = []
+        for s in pair:
+            final = max(self._l1_bounds(s)[2], min(self._l1_bounds(s)[3], self.servos[s]['open']))
+            if use_overshoot and overshoot_deg > 0:
+                pre = self._l1_overshoot_target(s, 'open', overshoot_deg)
+                ok1 = self._move_servo(s, pre)
+                ok2 = self._move_servo(s, final) if ok1 else False
+                results.append(ok1 and ok2)
+            else:
+                results.append(self._move_servo(s, final))
         ok = all(results)
         if ok:
             time.sleep(getattr(config, 'SERVO_OPEN_DURATION', 1.5))
@@ -567,14 +709,40 @@ class FiveServoHardware:
         if not pair:
             return False
         print("[5ServoHW] Closing ALL doors in sync...")
+        use_overshoot = getattr(config, 'SERVO_L1_USE_OVERSHOOT', True)
+        overshoot_deg = int(getattr(config, 'SERVO_L1_OVERSHOOT_DEG', 3))
         if HAS_SERVOKIT and self.kit is not None and all(s in self.servos for s in pair):
             channels = [self.servos[s]['channel'] for s in pair]
-            targets = [self.servos[s]['closed'] for s in pair]
-            ok = self._sync_move(channels, targets)
+            finals = []
+            presteps = []
+            for s in pair:
+                _, _, lo, hi = self._l1_bounds(s)
+                tgt = self.servos[s]['closed']
+                tgt = max(lo, min(hi, tgt))
+                finals.append(tgt)
+                if use_overshoot and overshoot_deg > 0:
+                    presteps.append(self._l1_overshoot_target(s, 'closed', overshoot_deg))
+                else:
+                    presteps.append(tgt)
+            if use_overshoot and overshoot_deg > 0:
+                ok1 = self._sync_move(channels, presteps)
+                ok = self._sync_move(channels, finals) if ok1 else False
+            else:
+                ok = self._sync_move(channels, finals)
             if ok:
                 print("[5ServoHW] ✓ ALL doors closed")
+                # Holding disabled (reverted) — PWM will be detached by _sync_move
             return ok
-        results = [self._move_servo(s, self.servos[s]['closed']) for s in pair]
+        results = []
+        for s in pair:
+            final = max(self._l1_bounds(s)[2], min(self._l1_bounds(s)[3], self.servos[s]['closed']))
+            if use_overshoot and overshoot_deg > 0:
+                pre = self._l1_overshoot_target(s, 'closed', overshoot_deg)
+                ok1 = self._move_servo(s, pre)
+                ok2 = self._move_servo(s, final) if ok1 else False
+                results.append(ok1 and ok2)
+            else:
+                results.append(self._move_servo(s, final))
         ok = all(results)
         if ok:
             print("[5ServoHW] ✓ ALL doors closed")
@@ -616,20 +784,43 @@ class FiveServoHardware:
         return ok1 and ok2
 
     def tilt_selector(self, tilt_angle: int):
-        """Miringkan selector relatif terhadap netral (positif = kanan, negatif = kiri)."""
+        """Miringkan selector relatif terhadap netral (positif = kanan, negatif = kiri) dengan akurasi.
+        Strategi: overshoot kecil melewati target untuk hilangkan backlash, kemudian settle tepat di target.
+        """
         if 'layer2_selector' not in self.servos:
             print("[5ServoHW] ⚠️  No Layer 2 selector configured - skipping tilt")
             return True
         neutral = self.servos['layer2_selector'].get('neutral', getattr(config, 'SERVO_LAYER2_NEUTRAL', 90))
-        target = int(max(0, min(180, neutral + int(tilt_angle))))
-        print(f"[5ServoHW] Tilting selector: neutral {neutral}° → {target}° (tilt {tilt_angle}°)")
-        return self._move_servo('layer2_selector', target)
+        tilt = int(tilt_angle)
+        target = int(max(0, min(180, neutral + tilt)))
+        overshoot = int(getattr(config, 'SERVO_LAYER2_TILT_OVERSHOOT_DEG', 0))
+        settle = max(0.0, float(getattr(config, 'SERVO_LAYER2_SETTLE_TIME', 0.15)))
+
+        if overshoot > 0 and tilt != 0:
+            sign = 1 if tilt > 0 else -1
+            pre = max(0, min(180, target + sign * overshoot))
+            print(f"[5ServoHW] Tilting selector (overshoot): neutral {neutral}° → pre {pre}° → target {target}° (tilt {tilt}°)")
+            ok1 = self._move_servo('layer2_selector', pre)
+            if settle:
+                time.sleep(settle)
+            ok2 = self._move_servo('layer2_selector', target)
+            if settle:
+                time.sleep(settle)
+            return ok1 and ok2
+        else:
+            print(f"[5ServoHW] Tilting selector: neutral {neutral}° → {target}° (tilt {tilt}°)")
+            ok = self._move_servo('layer2_selector', target)
+            if settle:
+                time.sleep(settle)
+            return ok
 
     def tilt_and_return(self, tilt_angle: int):
-        """Tilt selector relatif netral dan kembali ke netral (dengan overshoot fix)."""
+        """Tilt selector relatif netral ke ±tilt_angle, berhenti sejenak (hold), lalu kembali ke netral (overshoot centering)."""
         ok_tilt = self.tilt_selector(tilt_angle)
-        # Waktu agar sampah meluncur jika dipakai
-        time.sleep(max(0.0, float(getattr(config, 'SERVO_LAYER2_SETTLE_TIME', 0.15))))
+        # Tahan di sudut tilt agar terlihat jelas berhenti
+        hold = max(0.0, float(getattr(config, 'SERVO_LAYER2_TILT_HOLD_TIME', 0.3)))
+        if hold:
+            time.sleep(hold)
         ok_center = True
         if getattr(config, 'SERVO_LAYER2_RETURN_AFTER_TILT', True):
             ok_center = self.center_selector()
