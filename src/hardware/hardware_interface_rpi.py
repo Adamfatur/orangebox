@@ -140,7 +140,7 @@ class HardwareInterface:
         
         if not use_opencv_only and Picamera2 is not None:
             try:
-                print("[HardwareInterface] Trying PiCamera2...")
+                print("[HardwareInterface] Initializing PiCamera2...")
                 self.camera = Picamera2()
                 
                 # Configure camera
@@ -149,20 +149,40 @@ class HardwareInterface:
                 )
                 self.camera.configure(camera_config)
                 
-                # CRITICAL: Start can segfault!
+                # Start camera
                 print("[HardwareInterface] Starting camera...")
                 self.camera.start()
                 
-                # Warm up camera
-                time.sleep(2)
+                # CRITICAL: Camera warm-up with retry
+                print("[HardwareInterface] Warming up Pi Camera...")
+                frame_ok = False
+                max_attempts = 10
                 
-                print("[HardwareInterface] Pi Camera initialized (640x480)")
+                for attempt in range(max_attempts):
+                    try:
+                        test_frame = self.camera.capture_array()
+                        if test_frame is not None and test_frame.size > 0:
+                            frame_ok = True
+                            print(f"[HardwareInterface] ✓ Pi Camera ready after {attempt + 1} attempts")
+                            break
+                        time.sleep(0.2)
+                    except Exception as e:
+                        if attempt < max_attempts - 1:
+                            time.sleep(0.2)
+                            continue
+                        else:
+                            raise RuntimeError(f"Pi Camera failed to capture: {e}")
+                
+                if not frame_ok:
+                    raise RuntimeError("Pi Camera cannot capture frames")
+                
+                print("[HardwareInterface] ✓ Pi Camera initialized (640x480)")
                 self.camera_type = "picamera"
                 return
                 
             except Exception as e:
-                print(f"[WARNING] PiCamera2 failed: {e}")
-                print("[INFO] Falling back to OpenCV USB webcam...")
+                print(f"[HardwareInterface] ⚠️  PiCamera2 failed: {e}")
+                print("[HardwareInterface] Falling back to OpenCV USB webcam...")
                 # Clean up failed picamera
                 try:
                     if hasattr(self, 'camera') and self.camera:
@@ -170,7 +190,7 @@ class HardwareInterface:
                 except:
                     pass
         else:
-            print("[HardwareInterface] Using OpenCV for USB camera (PiCamera2 disabled)")
+            print("[HardwareInterface] Using OpenCV for camera detection")
         
         # Use OpenCV for USB webcam (more stable)
         try:
@@ -200,31 +220,58 @@ class HardwareInterface:
             # Set resolution and preferred MJPG format for stability/perf on RPi
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            
+            # Try MJPG format for better performance (optional - may not work on all cameras)
             try:
                 self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
                 self.camera.set(cv2.CAP_PROP_FPS, 30)
             except Exception:
-                pass
+                pass  # Ignore if not supported
             
-            # Warm-up frames to stabilize exposure/AGC
-            try:
-                for _ in range(5):
-                    self.camera.read()
-                    time.sleep(0.05)
-            except Exception:
-                pass
+            # CRITICAL: Camera warm-up with retry mechanism
+            # Some cameras (especially on RPi5) need multiple reads before working
+            print("[HardwareInterface] Warming up camera...")
+            frame_ok = False
+            max_warmup_attempts = 20  # Try up to 20 times
             
-            # Test read
-            ret, test_frame = self.camera.read()
-            if not ret or test_frame is None:
-                raise RuntimeError(f"Camera opened but cannot read frames")
+            for attempt in range(max_warmup_attempts):
+                try:
+                    ret, test_frame = self.camera.read()
+                    if ret and test_frame is not None and test_frame.size > 0:
+                        frame_ok = True
+                        print(f"[HardwareInterface] ✓ Camera ready after {attempt + 1} attempts")
+                        break
+                    time.sleep(0.1)  # Wait between attempts
+                except Exception as e:
+                    if attempt < max_warmup_attempts - 1:
+                        time.sleep(0.1)
+                        continue
+                    else:
+                        raise
             
-            print(f"[HardwareInterface] ✓ USB Webcam initialized (index: {cam_idx}, {test_frame.shape[1]}x{test_frame.shape[0]})")
+            if not frame_ok:
+                raise RuntimeError(
+                    f"Camera at index {cam_idx} opened but cannot read frames.\n"
+                    f"Possible causes:\n"
+                    f"  - Camera needs more initialization time\n"
+                    f"  - Driver issue (try different camera)\n"
+                    f"  - Permission issue (add user to 'video' group)\n"
+                    f"  - For Pi Camera: use 'libcamera-hello' to test\n"
+                    f"  - For USB Camera: check 'v4l2-ctl --list-devices'"
+                )
+            
+            # Get final frame info
+            actual_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            print(f"[HardwareInterface] ✓ USB Webcam initialized")
+            print(f"[HardwareInterface]   Index: {cam_idx}")
+            print(f"[HardwareInterface]   Resolution: {actual_width}x{actual_height}")
             self.camera_type = "opencv"
             
         except Exception as e:
-            print(f"[ERROR] Failed to initialize camera: {e}")
-            print("[ERROR] System will run without camera!")
+            print(f"[HardwareInterface] ❌ Camera initialization failed: {e}")
+            print("[HardwareInterface] System cannot run without camera!")
             self.camera = None
             self.camera_type = None
             raise
@@ -291,20 +338,27 @@ class HardwareInterface:
             Frame gambar (numpy array BGR format) atau None jika gagal
         """
         if self.camera is None:
-            print("[ERROR] Camera not initialized")
+            print("[HardwareInterface] ❌ Camera not initialized")
             return None
+            
         try:
             if self.camera_type == "picamera":
                 # Capture dari Pi Camera
                 frame = self.camera.capture_array()
+                if frame is None or frame.size == 0:
+                    print("[HardwareInterface] ⚠️  Pi Camera returned empty frame")
+                    return None
                 # Convert RGB to BGR (OpenCV format)
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                
             else:
                 # Capture dari USB webcam
                 ret, frame = self.camera.read()
-                if not ret or frame is None:
-                    print("[ERROR] Failed to capture frame")
+                if not ret or frame is None or frame.size == 0:
+                    print("[HardwareInterface] ⚠️  Camera read failed (empty frame)")
+                    print("[HardwareInterface] 💡 Try: restart camera or reboot system")
                     return None
+                    
             # Rate-limit camera capture logs to avoid spam
             try:
                 now = time.time()
@@ -313,9 +367,12 @@ class HardwareInterface:
                     self._last_frame_log_time = now
             except Exception:
                 pass
+                
             return frame
+            
         except Exception as e:
-            print(f"[ERROR] Camera capture failed: {e}")
+            print(f"[HardwareInterface] ❌ Camera capture error: {e}")
+            print(f"[HardwareInterface] 💡 Camera may have disconnected or need restart")
             return None
 
     # ====== UI Helpers (ported minimal dari mock untuk selaraskan gaya) ======
