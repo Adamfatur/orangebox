@@ -22,25 +22,45 @@ if ! $PYTHON_BIN -c "import cv2" 2>/dev/null; then
   
   # Detect Raspberry Pi
   if [ -f /proc/cpuinfo ] && grep -q "Raspberry Pi" /proc/cpuinfo; then
-    echo "🔧 Raspberry Pi detected - fixing OpenCV (using system cv2)..."
+    echo "🔧 Raspberry Pi detected - fixing OpenCV access..."
     
-    # Remove pip opencv if exists
+    # FIX: Recreate venv with --system-site-packages to access system opencv
     if [ -d ".venv" ]; then
-      .venv/bin/pip uninstall opencv-python opencv-contrib-python opencv-python-headless -y 2>/dev/null || true
+      # Check if venv has system-site-packages enabled
+      if [ ! -f ".venv/pyvenv.cfg" ] || ! grep -q "include-system-site-packages = true" ".venv/pyvenv.cfg"; then
+        echo "🔨 Recreating venv with system packages access..."
+        
+        # Backup and recreate
+        rm -rf .venv.backup 2>/dev/null || true
+        mv .venv .venv.backup 2>/dev/null || true
+        
+        # Create new venv with system-site-packages
+        python3 -m venv --system-site-packages .venv
+        .venv/bin/pip install --upgrade pip --quiet
+        
+        # Reinstall packages
+        echo "📦 Reinstalling Python packages..."
+        .venv/bin/pip install --quiet numpy RPi.GPIO gpiozero pymysql pynmea2 pyserial python-dotenv
+        .venv/bin/pip install --quiet adafruit-blinka adafruit-circuitpython-pca9685 adafruit-circuitpython-servokit
+        
+        PYTHON_BIN=".venv/bin/python3"
+      fi
     fi
     
-    # Install system opencv
-    echo "📦 Installing python3-opencv from apt..."
-    sudo apt-get update -qq 2>/dev/null || true
-    sudo apt-get install -y python3-opencv 2>/dev/null || true
+    # Install system opencv if not present
+    if ! dpkg -l | grep -q python3-opencv; then
+      echo "📦 Installing python3-opencv from apt..."
+      sudo apt-get update -qq 2>/dev/null || true
+      sudo apt-get install -y python3-opencv
+    fi
     
-    # Verify
-    if ! $PYTHON_BIN -c "import cv2; print('✓ OpenCV OK')" 2>/dev/null; then
-      echo "❌ OpenCV still not working. Running full install..."
+    # Verify fix
+    if ! $PYTHON_BIN -c "import cv2; print('✅ OpenCV accessible')" 2>/dev/null; then
+      echo "❌ OpenCV still not accessible. Running full installer..."
       bash ./install.sh
       PYTHON_BIN=".venv/bin/python3"
     else
-      echo "✓ OpenCV fixed!"
+      echo "✅ OpenCV fix successful!"
     fi
   else
     # Non-RPi: run normal install

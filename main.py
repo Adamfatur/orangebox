@@ -10,6 +10,7 @@ import sys
 import os
 import argparse
 import subprocess
+import shutil
 
 # ==================================================================================
 # CRITICAL: Auto-Fix Virtual Environment
@@ -19,6 +20,7 @@ def check_and_fix_venv():
     """
     Memeriksa apakah script dijalankan di dalam virtual environment yang benar.
     Jika tidak, akan OTOMATIS re-launch dengan venv atau jalankan install.sh.
+    Auto-fix untuk masalah OpenCV di Raspberry Pi juga ditangani di sini.
     """
     project_dir = os.path.abspath(os.path.dirname(__file__))
     venv_python = os.path.join(project_dir, '.venv', 'bin', 'python3')
@@ -26,7 +28,87 @@ def check_and_fix_venv():
     
     # Cek apakah current python adalah venv python
     if current_python == venv_python or current_python.startswith(os.path.join(project_dir, '.venv')):
-        print("✅ Running in correct virtual environment.")
+        # Running in venv - check if OpenCV is accessible
+        try:
+            import cv2
+            print("✅ Running in correct virtual environment with OpenCV.")
+            return
+        except ImportError:
+            # OpenCV not accessible - auto-fix for Raspberry Pi
+            print("⚠️  OpenCV not accessible in venv - attempting auto-fix...")
+            
+            # Detect Raspberry Pi
+            is_rpi = os.path.exists('/proc/cpuinfo')
+            if is_rpi:
+                with open('/proc/cpuinfo', 'r') as f:
+                    is_rpi = 'Raspberry Pi' in f.read()
+            
+            if is_rpi:
+                print("🔧 Raspberry Pi detected - fixing OpenCV access...")
+                
+                # Check if venv has system-site-packages
+                pyvenv_cfg = os.path.join(project_dir, '.venv', 'pyvenv.cfg')
+                needs_recreate = True
+                
+                if os.path.exists(pyvenv_cfg):
+                    with open(pyvenv_cfg, 'r') as f:
+                        if 'include-system-site-packages = true' in f.read():
+                            needs_recreate = False
+                
+                if needs_recreate:
+                    print("🔨 Recreating venv with system packages access...")
+                    
+                    # Backup old venv
+                    backup_venv = os.path.join(project_dir, '.venv.backup')
+                    if os.path.exists(backup_venv):
+                        shutil.rmtree(backup_venv)
+                    
+                    venv_dir = os.path.join(project_dir, '.venv')
+                    os.rename(venv_dir, backup_venv)
+                    
+                    # Create new venv with system-site-packages
+                    subprocess.run([sys.executable, '-m', 'venv', '--system-site-packages', venv_dir], 
+                                   check=True, cwd=project_dir)
+                    
+                    # Upgrade pip
+                    subprocess.run([venv_python, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'],
+                                   check=True, cwd=project_dir)
+                    
+                    # Reinstall packages
+                    print("📦 Reinstalling Python packages...")
+                    packages = [
+                        'numpy', 'RPi.GPIO', 'gpiozero', 'pymysql', 'pynmea2', 
+                        'pyserial', 'python-dotenv', 'adafruit-blinka',
+                        'adafruit-circuitpython-pca9685', 'adafruit-circuitpython-servokit'
+                    ]
+                    subprocess.run([venv_python, '-m', 'pip', 'install', '--quiet'] + packages,
+                                   check=True, cwd=project_dir)
+                
+                # Install system opencv if not present
+                try:
+                    result = subprocess.run(['dpkg', '-l'], capture_output=True, text=True)
+                    if 'python3-opencv' not in result.stdout:
+                        print("📦 Installing python3-opencv from apt...")
+                        subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=False)
+                        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'python3-opencv'], check=True)
+                except:
+                    pass
+                
+                # Verify fix by re-launching
+                print("🔄 Re-launching to verify OpenCV fix...")
+                cmd = [venv_python, os.path.abspath(__file__)] + sys.argv[1:]
+                os.execv(venv_python, cmd)
+            else:
+                # Not Raspberry Pi - run installer
+                print("📦 OpenCV not found. Running installer...")
+                install_script = os.path.join(project_dir, 'install.sh')
+                if os.path.exists(install_script):
+                    subprocess.run(['bash', install_script], check=True, cwd=project_dir)
+                    cmd = [venv_python, os.path.abspath(__file__)] + sys.argv[1:]
+                    os.execv(venv_python, cmd)
+                else:
+                    print("❌ ERROR: OpenCV not available and install.sh missing!")
+                    sys.exit(1)
         return
     
     # Tidak di venv yang benar - coba auto-fix

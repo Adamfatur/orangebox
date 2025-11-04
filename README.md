@@ -41,7 +41,8 @@ python3 main.py
   - **4 Corner Servos**: Mengangkat/menurunkan wadah di setiap sudut
   - **2 Lock Servos**: Mengunci wadah di posisi atas
   - **1 Selector Servo**: Memilah ke Bin A (Organic) atau Bin B (Anorganic)
-  - **Driver**: PCA9685 16-channel I2C servo driver board
+  - **Driver**: PCA9685 16-channel I2C servo driver board (I2C address 0x40)
+  - **❌ TIDAK perlu**: GPIO PWM, proximity sensor, RPi.GPIO library
 - **Power**: 
   - 5V 3A untuk Raspberry Pi
   - 5V 10A untuk 7 servo (terpisah!)
@@ -427,6 +428,28 @@ bash deployment/uninstall.sh
 
 ## 🐛 Troubleshooting
 
+### Error: ModuleNotFoundError: No module named 'cv2'
+
+**PENYEBAB**: Virtual environment tidak punya akses ke `python3-opencv` sistem.
+
+**✅ SOLUSI OTOMATIS**: Script `start.sh` dan `main.py` sudah punya **auto-fix**!
+
+Cukup jalankan:
+```bash
+./start.sh
+# atau
+python3 main.py
+```
+
+Script akan **otomatis**:
+1. Deteksi OpenCV tidak accessible di venv
+2. Recreate venv dengan `--system-site-packages` flag
+3. Install `python3-opencv` dari apt (punya V4L2 support untuk camera)
+4. Reinstall semua dependencies
+5. Re-launch aplikasi
+
+**Detail**: Lihat [docs_archive/OPENCV_FIX_INFO.md](./docs_archive/OPENCV_FIX_INFO.md)
+
 ### Segmentation Fault di Raspberry Pi
 
 **PENYEBAB**: Menggunakan TensorFlow full library atau tidak di venv yang benar.
@@ -450,6 +473,24 @@ python3 scripts/verify_no_conflicts.py
 # Expected output:
 # ✅ NO CONFLICTS DETECTED - All libraries are properly configured!
 ```
+
+### Error: Cannot determine SOC peripheral base address
+
+**PENYEBAB**: Kode lama mencoba gunakan RPi.GPIO (tidak support Raspberry Pi 5).
+
+**✅ SUDAH DIPERBAIKI**: v1.2 menggunakan I2C PCA9685 (tanpa RPi.GPIO).
+
+Jika masih error, update ke versi terbaru:
+```bash
+git pull origin v1.2
+```
+
+**Catatan**: Sistem v1.2 **TIDAK memerlukan**:
+- ❌ RPi.GPIO library
+- ❌ Proximity sensor
+- ❌ GPIO PWM
+
+Semua servo control via **I2C PCA9685** only.
 
 ### Kamera Tidak Terdeteksi
 

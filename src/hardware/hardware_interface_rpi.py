@@ -5,19 +5,17 @@ Implementasi untuk Raspberry Pi 5 dengan hardware sesungguhnya.
 Hardware yang diperlukan:
 - Raspberry Pi 5
 - Pi Camera Module (atau USB Webcam)
-- Proximity Sensor (HC-SR04 atau IR sensor)
-- Servo Motor + PCA9685 Servo Driver
-- Power supply yang memadai
+- 7x Servo Motor MG996R + PCA9685 I2C Servo Driver
+- Power supply yang memadai (5V 3A untuk Pi, 5V 10A untuk servo)
 """
 
 # PANDUAN SINGKAT (RPi5): KAMERA & SERVO DI FILE INI
 # - Kamera: otomatis pilih PiCamera2 jika tersedia, kalau tidak pakai USB webcam (OpenCV).
 #   Ubah manual via argumen: `python3 main.py --camera 0`.
 #   Cek deteksi: `python3 -m src.core.camera_detector`.
-# - Servo (opsi PCA9685): atur channel & sudut default di bagian "Servo Configuration"
-#   → `self.SERVO_CHANNEL`, `self.SERVO_ANGLE_BIN_A/B/NEUTRAL` (legacy untuk mode PCA9685)
-#   Untuk GPIO servo (PWM langsung), gunakan `src/hardware/gpio_servo_hardware.py`
-#   dan set derajat di `config.py` (lebih umum dipakai di proyek ini).
+# - Servo: Sistem menggunakan 7-servo dengan PCA9685 I2C driver
+#   Konfigurasi ada di config.py (SERVO_DRIVER = 'seven_servo')
+#   Channel mapping: CH0-6 untuk 4 corners, 2 locks, 1 selector
 
 # CRITICAL: Fix Qt platform plugin error on Raspberry Pi
 # OpenCV tries to use Wayland but it's not available in venv
@@ -38,21 +36,16 @@ import config
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-# RPi GPIO Libraries (install: pip3 install RPi.GPIO)
-try:
-    import RPi.GPIO as GPIO
-except ImportError:
-    print("WARNING: RPi.GPIO not found. This is expected on non-RPi systems.")
-    GPIO = None
-
-# PiCamera2 (install: pip3 install picamera2)
+# PiCamera2 (install: sudo apt install python3-picamera2)
 try:
     from picamera2 import Picamera2
 except ImportError:
     print("WARNING: picamera2 not found. Falling back to OpenCV.")
     Picamera2 = None
 
-# Servo Driver (install: pip3 install adafruit-circuitpython-pca9685)
+# Servo Driver - NOT USED in hardware_interface_rpi.py
+# Servo control is handled by seven_servo_hardware.py via MainController
+# This file only handles camera operations
 try:
     from board import SCL, SDA
     import busio
@@ -69,36 +62,19 @@ class HardwareInterface:
     Mengontrol sensor proximity, Pi Camera, dan servo motor.
     """
     
-    def __init__(self, camera_index: int = None):
+    def __init__(self, camera_index: Optional[int] = None):
         """
-        Inisialisasi hardware interface untuk Raspberry Pi.
+        Initialize hardware interface.
         
         Args:
-            camera_index: Index kamera (None = auto-detect, 0-4 untuk manual selection)
+            camera_index: Index kamera (0, 1, 2...). None = auto-detect
         """
-        # Import config
-        import config
-        
-        # GPIO Pin Configuration
-        self.USE_PROXIMITY_SENSOR = getattr(config, 'USE_PROXIMITY_SENSOR', False)
-        self.PROXIMITY_SENSOR_PIN = getattr(config, 'PROXIMITY_SENSOR_PIN', 17)
-        
-        # Servo Configuration
-        self.SERVO_CHANNEL = 0  # Channel servo di PCA9685
-        self.SERVO_ANGLE_BIN_A = 0      # Sudut servo untuk Bin A (Organic)
-        self.SERVO_ANGLE_BIN_B = 90     # Sudut servo untuk Bin B (Anorganic)
-        self.SERVO_ANGLE_NEUTRAL = 45   # Sudut servo posisi netral
-        # CATATAN: Jika kamu memakai 3-servo GPIO (tanpa PCA9685), abaikan pengaturan di atas
-        # dan gunakan nilai dari config.py melalui ThreeServoHardware.
+        print("[HardwareInterface] Initializing...")
         
         # Camera
         self.camera = None
         self.camera_index = camera_index
         self.camera_config = None
-        
-        # Servo driver
-        self.pca = None
-        self.servo_motor = None
         
         # State
         self.last_trigger_time = 0
@@ -115,18 +91,10 @@ class HardwareInterface:
         if camera_index is None:
             self._auto_detect_camera()
         
-        # Initialize components
-        self._initialize_gpio()
+        # Initialize hardware components
         self._initialize_camera()
-        self._initialize_servo()
-        self._load_logo()
-        # Siapkan window agar resizable (lebih konsisten render teks)
-        try:
-            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
-        except Exception:
-            pass
         
-        print("[HardwareInterface] Raspberry Pi hardware initialized")
+        print("[HardwareInterface] ✓ Hardware initialization complete")
     
     def _auto_detect_camera(self):
         """Auto-detect available camera and set camera_index"""
@@ -155,43 +123,6 @@ class HardwareInterface:
             self.camera_index = 0
 
     
-    def _initialize_gpio(self):
-        """
-        Initialize GPIO untuk proximity sensor.
-        
-        Note: Pada Raspberry Pi 5, RPi.GPIO mungkin belum fully supported.
-        Jika terjadi error "Cannot determine SOC peripheral base address",
-        set USE_PROXIMITY_SENSOR = False di config.py
-        """
-        if GPIO is None:
-            print("[HardwareInterface] ⚠️  RPi.GPIO not available (non-RPi system)")
-            return
-        
-        if not self.USE_PROXIMITY_SENSOR:
-            print("[HardwareInterface] ℹ️  Proximity sensor disabled (USE_PROXIMITY_SENSOR=False)")
-            return
-        
-        try:
-            # Setup GPIO mode
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setwarnings(False)
-            
-            # Setup proximity sensor pin sebagai input dengan pull-down
-            GPIO.setup(self.PROXIMITY_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-            
-            print(f"[HardwareInterface] GPIO initialized (Proximity sensor: GPIO{self.PROXIMITY_SENSOR_PIN})")
-        
-        except RuntimeError as e:
-            # RPi.GPIO error pada Raspberry Pi 5 atau sistem tidak kompatibel
-            print(f"[HardwareInterface] ⚠️  GPIO initialization failed: {e}")
-            print("[HardwareInterface] ℹ️  Continuing without proximity sensor...")
-            print("[HardwareInterface] 💡 Set USE_PROXIMITY_SENSOR=False in config.py to suppress this warning")
-            self.USE_PROXIMITY_SENSOR = False  # Disable proximity sensor
-        
-        except Exception as e:
-            print(f"[HardwareInterface] ⚠️  Unexpected GPIO error: {e}")
-            print("[HardwareInterface] ℹ️  Continuing without proximity sensor...")
-            self.USE_PROXIMITY_SENSOR = False
     
     def _initialize_camera(self):
         """
@@ -339,38 +270,15 @@ class HardwareInterface:
     
     def check_trigger(self) -> bool:
         """
-        Baca status proximity sensor.
+        Check for trigger event.
+        
+        Note: Hardware interface does NOT handle triggers in v1.2.
+        Trigger logic is handled by MainController (button press or timed intervals).
+        This method always returns False for compatibility.
         
         Returns:
-            True jika sensor mendeteksi objek, False jika tidak
-            
-        Note: Jika proximity sensor disabled, selalu return False
+            False (no proximity sensor in v1.2)
         """
-        # Jika proximity sensor disabled, tidak pernah trigger
-        if not self.USE_PROXIMITY_SENSOR:
-            return False
-        
-        if GPIO is None:
-            return False
-        
-        # Implementasi cooldown
-        current_time = time.time()
-        if current_time - self.last_trigger_time < self.trigger_cooldown:
-            return False
-        
-        try:
-            # Baca status sensor (HIGH = object detected)
-            sensor_state = GPIO.input(self.PROXIMITY_SENSOR_PIN)
-            
-            if sensor_state == GPIO.HIGH:
-                self.last_trigger_time = current_time
-                print("[HardwareInterface] ⚡ TRIGGER DETECTED (Proximity sensor)")
-                return True
-        
-        except Exception as e:
-            print(f"[HardwareInterface] ⚠️  Proximity sensor read error: {e}")
-            return False
-        
         return False
     
     def get_camera_frame(self) -> Optional[np.ndarray]:
@@ -690,14 +598,6 @@ class HardwareInterface:
             except:
                 pass
         
-        # Cleanup GPIO
-        if GPIO is not None and self.USE_PROXIMITY_SENSOR:
-            try:
-                GPIO.cleanup()
-            except Exception as e:
-                print(f"[HardwareInterface] ⚠️  GPIO cleanup warning: {e}")
-                pass
-
         # Close preview windows (if any)
         try:
             import cv2
