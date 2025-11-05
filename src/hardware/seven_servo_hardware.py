@@ -215,6 +215,14 @@ class SevenServoHardware:
         
         corner_up = getattr(config, 'SERVO_L1_CORNER_UP', 0)
         corner_down = getattr(config, 'SERVO_L1_CORNER_DOWN', 90)
+        max_corner_swing = getattr(config, 'SERVO_MAX_SWING_CORNER_DEG', 90)
+        # Enforce max swing for corners (exactly 90° by default)
+        delta_corner = corner_down - corner_up
+        if abs(delta_corner) != max_corner_swing:
+            sign = 1 if delta_corner >= 0 else -1
+            adjusted = corner_up + sign * max_corner_swing
+            print(f"[7ServoHW] • Adjust corners swing: {corner_up}→{corner_down} (Δ{delta_corner}°) → {corner_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
+            corner_down = adjusted
         
         for name, channel in corner_channels.items():
             if channel is not None:
@@ -237,6 +245,8 @@ class SevenServoHardware:
         lock_locked = getattr(config, 'SERVO_L1_LOCK_LOCKED', 90)
         lock_unlocked = getattr(config, 'SERVO_L1_LOCK_UNLOCKED', 0)
         
+        max_lock_swing = getattr(config, 'SERVO_MAX_SWING_LOCK_DEG', 90)
+
         for name, channel in lock_channels.items():
             if channel is not None:
                 # Per-servo overrides for lock angles (support opposite directions)
@@ -249,6 +259,14 @@ class SevenServoHardware:
                 else:
                     locked_angle = lock_locked
                     unlocked_angle = lock_unlocked
+
+                # Enforce max swing (e.g., exactly 90° movement from locked)
+                delta = unlocked_angle - locked_angle
+                if abs(delta) != max_lock_swing:
+                    sign = 1 if delta >= 0 else -1
+                    adjusted = locked_angle + sign * max_lock_swing
+                    print(f"[7ServoHW] • Adjust {name} swing: {locked_angle}→{unlocked_angle} (Δ{delta}°) → {locked_angle}→{adjusted} (Δ{sign*max_lock_swing}°)")
+                    unlocked_angle = adjusted
 
                 self.servos[name] = {
                     'name': f'Layer 1 {name.upper()}',

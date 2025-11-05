@@ -307,6 +307,10 @@ SERVO_OFFSET_CORNER_C = 0
 SERVO_OFFSET_CORNER_D = 0
 SERVO_OFFSET_SELECTOR = 0
 
+# Batasi maksimum ayunan (derajat) dari posisi netral untuk safety
+SERVO_MAX_SWING_LOCK_DEG = 90
+SERVO_MAX_SWING_CORNER_DEG = 90
+
 # ============================================
 # TIMING SETTINGS
 # ============================================
