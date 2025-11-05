@@ -245,6 +245,42 @@ Akan verify:
 - ✅ Tidak ada TensorFlow (prevent segfault)
 - ✅ Tidak ada duplikasi library
 
+#### Servo Direct Test (PCA9685) — Uji Derajat per Channel
+
+Untuk test paling sederhana langsung ke PCA9685 (tanpa aplikasi utama):
+
+```bash
+source .venv/bin/activate
+python3 scripts/servo_direct_test.py
+```
+
+Menu yang tersedia:
+- 1: Set CHANNEL → ANGLE (0–180°)
+- 2: Lock A UNLOCK lalu LOCK (sesuai config)
+- 3: Lock B UNLOCK lalu LOCK
+- 4: Corners ALL UP (0°)
+- 5: Corners ALL DOWN (90°)
+- 6: Selector → BIN A lalu NEUTRAL
+- 7: Selector → BIN B lalu NEUTRAL
+- 8: Center mapped servos ke 90° (raw)
+- 0: Tampilkan konfigurasi aktif (derajat & offset)
+- h: Bantuan (panduan derajat & kalibrasi)
+- e: Emergency OFF (PWM None)
+
+One-shot CLI untuk set 1 channel:
+
+```bash
+python3 scripts/servo_direct_test.py --ch 0 --angle 90
+```
+
+Catatan kalibrasi:
+- Semua sudut aman di 0–180°.
+- Ubah derajat default di `config.py`:
+  - Corner: `SERVO_L1_CORNER_UP` (0°), `SERVO_L1_CORNER_DOWN` (90°)
+  - Lock A/B: `SERVO_L1_LOCK_LEFT_*`, `SERVO_L1_LOCK_RIGHT_*`
+  - Selector: `SERVO_L2_SELECTOR_*`
+- Gunakan `SERVO_OFFSET_*` untuk koreksi halus jika horn tidak pas 90°.
+
 ## 🎛️ Konfigurasi
 
 Edit `config.py` untuk menyesuaikan:

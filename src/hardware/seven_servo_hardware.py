@@ -362,6 +362,23 @@ class SevenServoHardware:
             print(f"[7ServoHW] ❌ SAFETY: Invalid angle type {type(angle)} for '{servo_id}'")
             return False
         
+        # Enforce allowed targets per servo type to avoid out-of-spec moves
+        allowed = None
+        if servo_id in ('corner_a','corner_b','corner_c','corner_d'):
+            # Corners hanya boleh ke UP atau DOWN
+            allowed = [self.servos[servo_id]['up'], self.servos[servo_id]['down']]
+        elif servo_id in ('lock_left','lock_right'):
+            # Locks hanya boleh ke LOCKED atau UNLOCKED
+            allowed = [self.servos[servo_id]['locked'], self.servos[servo_id]['unlocked']]
+        elif servo_id == 'selector':
+            allowed = [self.servos['selector']['neutral'], self.servos['selector']['bin_a'], self.servos['selector']['bin_b']]
+
+        if allowed is not None and angle not in allowed:
+            # Snap ke target terdekat untuk safety
+            nearest = min(allowed, key=lambda x: abs(x - float(angle)))
+            print(f"[7ServoHW] ⚠ Safety snap '{servo_id}' {angle}° → {nearest}° (allowed={allowed})")
+            angle = nearest
+
         # Apply optional per-servo offset and clamp
         offset = self._get_offset(servo_id)
         target = angle + offset
@@ -378,7 +395,7 @@ class SevenServoHardware:
         cfg['last_move_time'] = time.time()
         
         # Execute movement
-        return self._move_channel(channel, target)
+        return self._move_channel(channel, target, servo_id=servo_id)
 
     def _get_offset(self, servo_id):
         """Return per-servo angle offset from config (degrees)."""
@@ -401,7 +418,7 @@ class SevenServoHardware:
             pass
         return 0
 
-    def _move_channel(self, channel, angle):
+    def _move_channel(self, channel, angle, servo_id=None):
         """
         Low-level channel movement with PWM control.
         
@@ -411,11 +428,13 @@ class SevenServoHardware:
         """
         try:
             if not HAS_SERVOKIT or self.kit is None:
-                print(f"[7ServoHW] 🎬 SIMULATE: CH{channel} → {angle}°")
+                print(f"[7ServoHW] 🎬 SIMULATE: {servo_id or 'CH'+str(channel)} @ CH{channel} → {angle}°")
                 time.sleep(0.05)  # Simulate movement time
                 return True
             
             # Move to target angle
+            if getattr(config, 'SERVO_DEBUG_TIMING', False):
+                print(f"[7ServoHW] → MOVE {servo_id or 'CH'+str(channel)} @ CH{channel} = {angle}°")
             self.kit.servo[channel].angle = angle
             
             # Wait for movement to complete
@@ -429,7 +448,9 @@ class SevenServoHardware:
             
             # Stop PWM to prevent jitter (optional)
             stop_jitter = getattr(config, 'SERVO_STOP_JITTER', True)
-            if stop_jitter:
+            keep_power_locks = getattr(config, 'SERVO_KEEP_POWER_LOCKS', True)
+            # Untuk lock servo, biarkan PWM tetap aktif agar posisi stabil menahan beban
+            if stop_jitter and not (keep_power_locks and (servo_id in ('lock_left','lock_right'))):
                 try:
                     self.kit.servo[channel].angle = None
                     # print(f"[7ServoHW] ✓ CH{channel} locked at {angle}°")

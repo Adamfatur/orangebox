@@ -294,6 +294,10 @@ PCA_CHANNELS_ONE_INDEXED = False # Set True jika papan Anda dilabeli 1-16 (bukan
 # Debug timing untuk verifikasi gerakan paralel (print timestamp start/done per servo)
 SERVO_DEBUG_TIMING = False
 
+# Biarkan PWM tetap aktif khusus servo LOCK agar posisi tidak melorot saat menahan beban
+# True direkomendasikan untuk sistem mekanis yang butuh gaya tahan pada posisi LOCKED
+SERVO_KEEP_POWER_LOCKS = True
+
 # ──────────────────────────────────────────
 # Servo Angle Offsets (kalibrasi halus per-servo)
 # ──────────────────────────────────────────
