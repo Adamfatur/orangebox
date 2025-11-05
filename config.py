@@ -207,9 +207,9 @@ SERVOKIT_ACTUATION_RANGE = 180    # derajat total
 # Fungsi: Mengangkat dan menurunkan wadah di setiap sudut
 
 SERVO_L1_CORNER_A_CHANNEL = 0    # Channel PCA9685 - Sudut A (Kiri Atas)
-SERVO_L1_CORNER_B_CHANNEL = 1    # Channel PCA9685 - Sudut B (Kiri Bawah)
-SERVO_L1_CORNER_C_CHANNEL = 2    # Channel PCA9685 - Sudut C (Kanan Atas)
-SERVO_L1_CORNER_D_CHANNEL = 3    # Channel PCA9685 - Sudut D (Kanan Bawah)
+SERVO_L1_CORNER_B_CHANNEL = 2    # Channel PCA9685 - Sudut B (Kiri Bawah)
+SERVO_L1_CORNER_C_CHANNEL = 4    # Channel PCA9685 - Sudut C (Kanan Atas)
+SERVO_L1_CORNER_D_CHANNEL = 6    # Channel PCA9685 - Sudut D (Kanan Bawah)
 
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
 SERVO_L1_CORNER_UP = 0           # Posisi UP (wadah terangkat, siap terima sampah)
@@ -224,8 +224,8 @@ SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun setelah jatuh gravit
 #   LOCKED (90°)   → Servo arm horizontal di bawah wadah (menahan)
 #   UNLOCKED (0°)  → Servo arm vertikal (lepas, wadah bisa jatuh)
 
-SERVO_L1_LOCK_LEFT_CHANNEL = 4   # Channel PCA9685 - Lock Kiri (tengah sisi kiri)
-SERVO_L1_LOCK_RIGHT_CHANNEL = 5  # Channel PCA9685 - Lock Kanan (tengah sisi kanan)
+SERVO_L1_LOCK_LEFT_CHANNEL = 8   # Channel PCA9685 - Lock Kiri (tengah sisi kiri)
+SERVO_L1_LOCK_RIGHT_CHANNEL = 10 # Channel PCA9685 - Lock Kanan (tengah sisi kanan)
 
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
 SERVO_L1_LOCK_LOCKED = 90        # LOCKED: Horizontal, menahan wadah di atas
@@ -236,7 +236,7 @@ SERVO_L1_LOCK_UNLOCKED = 0       # UNLOCKED: Vertikal, lepas agar wadah jatuh
 # ──────────────────────────────────────────
 # Fungsi: Memilah sampah ke Bin A (Organik) atau Bin B (Anorganik)
 
-SERVO_L2_SELECTOR_CHANNEL = 6    # Channel PCA9685 - Pemilah
+SERVO_L2_SELECTOR_CHANNEL = 12   # Channel PCA9685 - Pemilah
 
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
 SERVO_L2_SELECTOR_NEUTRAL = 90   # NEUTRAL: Tengah (horizontal)
@@ -277,6 +277,10 @@ SERVO_POSITION_HOLD_TIME = 0.05 # Waktu tahan posisi biar kunci mekanis
 # PCA9685 Settings (untuk sistem 7-servo)
 PCA9685_I2C_ADDRESS = 0x40      # Alamat I2C board PCA9685 (biasanya 0x40)
 PCA9685_FREQUENCY = 50          # Sama dengan SERVO_PWM_FREQUENCY
+PCA_CHANNELS_ONE_INDEXED = False # Set True jika papan Anda dilabeli 1-16 (bukan 0-15). Akan otomatis N→N-1.
+
+# Debug timing untuk verifikasi gerakan paralel (print timestamp start/done per servo)
+SERVO_DEBUG_TIMING = False
 
 # ============================================
 # TIMING SETTINGS

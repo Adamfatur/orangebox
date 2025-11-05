@@ -183,13 +183,34 @@ class SevenServoHardware:
 
     def _setup_servos_config(self):
         """Load servo configuration from config.py"""
+        def _normalize_channel(ch):
+            """Normalize channel index based on config, validate range.
+            - Supports 1-based indices if PCA_CHANNELS_ONE_INDEXED=True (maps N -> N-1)
+            - Returns None for invalid values.
+            """
+            if ch is None:
+                return None
+            try:
+                ch_int = int(ch)
+            except Exception:
+                print(f"[7ServoHW] ⚠ Invalid channel value: {ch} (must be int 0-15)")
+                return None
+            original = ch_int
+            if getattr(config, 'PCA_CHANNELS_ONE_INDEXED', False):
+                ch_int = ch_int - 1
+            if ch_int < 0 or ch_int > 15:
+                print(f"[7ServoHW] ⚠ Channel out of range after normalize: {original} → {ch_int} (valid 0-15)")
+                return None
+            if getattr(config, 'PCA_CHANNELS_ONE_INDEXED', False) and original != ch_int:
+                print(f"[7ServoHW] • Channel mapping (1-based→0-based): {original} → {ch_int}")
+            return ch_int
         
         # Layer 1 - Corner Servos (4 servo untuk sudut wadah)
         corner_channels = {
-            'corner_a': getattr(config, 'SERVO_L1_CORNER_A_CHANNEL', 0),  # Kiri atas
-            'corner_b': getattr(config, 'SERVO_L1_CORNER_B_CHANNEL', 1),  # Kiri bawah
-            'corner_c': getattr(config, 'SERVO_L1_CORNER_C_CHANNEL', 2),  # Kanan atas
-            'corner_d': getattr(config, 'SERVO_L1_CORNER_D_CHANNEL', 3),  # Kanan bawah
+            'corner_a': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_A_CHANNEL', 0)),  # Kiri atas
+            'corner_b': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_B_CHANNEL', 1)),  # Kiri bawah
+            'corner_c': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_C_CHANNEL', 2)),  # Kanan atas
+            'corner_d': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_D_CHANNEL', 3)),  # Kanan bawah
         }
         
         corner_up = getattr(config, 'SERVO_L1_CORNER_UP', 0)
@@ -209,8 +230,8 @@ class SevenServoHardware:
         
         # Layer 1 - Lock Servos (2 servo pengunci)
         lock_channels = {
-            'lock_left': getattr(config, 'SERVO_L1_LOCK_LEFT_CHANNEL', 4),
-            'lock_right': getattr(config, 'SERVO_L1_LOCK_RIGHT_CHANNEL', 5),
+            'lock_left': _normalize_channel(getattr(config, 'SERVO_L1_LOCK_LEFT_CHANNEL', 4)),
+            'lock_right': _normalize_channel(getattr(config, 'SERVO_L1_LOCK_RIGHT_CHANNEL', 5)),
         }
         
         lock_locked = getattr(config, 'SERVO_L1_LOCK_LOCKED', 90)
@@ -229,7 +250,7 @@ class SevenServoHardware:
                 print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (LOCKED={lock_locked}°, UNLOCKED={lock_unlocked}°)")
         
         # Layer 2 - Selector Servo (1 servo pemilah)
-        selector_channel = getattr(config, 'SERVO_L2_SELECTOR_CHANNEL', 6)
+        selector_channel = _normalize_channel(getattr(config, 'SERVO_L2_SELECTOR_CHANNEL', 6))
         
         if selector_channel is not None:
             self.servos['selector'] = {
@@ -377,7 +398,13 @@ class SevenServoHardware:
         
         def move_worker(servo_id, angle, result_dict):
             """Worker thread for moving one servo"""
+            if getattr(config, 'SERVO_DEBUG_TIMING', False):
+                t0 = time.time()
+                print(f"[7ServoHW][T+] start {servo_id} → {angle}° at {t0:.3f}")
             success = self._move_servo(servo_id, angle)
+            if getattr(config, 'SERVO_DEBUG_TIMING', False):
+                t1 = time.time()
+                print(f"[7ServoHW][T+] done  {servo_id} → {angle}° at {t1:.3f} (Δ{t1 - t0:.3f}s)")
             result_dict[servo_id] = success
         
         # Start all servo movements simultaneously
