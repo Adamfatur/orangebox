@@ -37,11 +37,14 @@ python3 main.py
 - **Raspberry Pi 5** (4GB/8GB RAM)
 - **Raspberry Pi OS Bookworm** (64-bit)
 - **Kamera**: USB webcam (Logitech C270/C920) atau Raspberry Pi Camera Module
-- **Servo**: **7 servo MG996R** (sistem terbaru)
-  - **4 Corner Servos**: Mengangkat/menurunkan wadah di setiap sudut
-  - **2 Lock Servos**: Mengunci wadah di posisi atas
-  - **1 Selector Servo**: Memilah ke Bin A (Organic) atau Bin B (Anorganic)
+- **Servo**: **7 servo MG996R POSITIONAL (0-180°)** — ⚠️ **CRITICAL: Harus POSITIONAL, BUKAN Continuous Rotation!**
+  - **4 Corner Servos** (CH 4,6,8,9): Mengangkat/menurunkan wadah di setiap sudut
+  - **2 Lock Servos** (CH 0,2): Mengunci wadah di posisi atas
+  - **1 Selector Servo** (CH 12): Memilah ke Bin A (Organic) atau Bin B (Anorganic)
   - **Driver**: PCA9685 16-channel I2C servo driver board (I2C address 0x40)
+  - **Spesifikasi:** MG996R Metal Gear Servo atau equivalent (9.4-11 kg.cm, 0-180°)
+  - **⚠️ WAJIB:** Label servo harus "Standard Servo" atau "0-180°" (BUKAN "360°" atau "Continuous Rotation")
+  - 📋 **[Servo Guide](docs/SERVO_GUIDE.md)** - Installation, fixes and troubleshooting (single consolidated guide)
   - **❌ TIDAK perlu**: GPIO PWM, proximity sensor, RPi.GPIO library
 - **Power**: 
   - 5V 3A untuk Raspberry Pi
@@ -56,21 +59,28 @@ python3 main.py
 
 ## 🏗️ Arsitektur 7-Servo System
 
-### **Layer 1 - Container Management (6 Servo)**
+⚠️ **READY:** Sistem sudah dikonfigurasi untuk **7 servo POSITIONAL (0-180°)** MG996R.  
+✅ Config aktif mendukung full 7-servo system (4 corners + 2 locks + 1 selector)
+
+📚 **Documentation:**
+- 📖 **[Servo Guide](docs/SERVO_GUIDE.md)** - Installation & troubleshooting
+- 📄 **[Quick Start](docs/QUICK_START_SERVO_BARU.txt)** - 6 langkah instalasi (30-45 menit)### **Layer 1 - Container Management (6 Servo)**
 
 #### **Corner Servos (4 servo)** - Mengangkat/Menurunkan Wadah
 | Servo | Posisi | Channel | UP | DOWN |
 |-------|--------|---------|-----|------|
-| Corner A | Kiri Atas | CH 0 | 0° | 90° |
-| Corner B | Kiri Bawah | CH 1 | 0° | 90° |
-| Corner C | Kanan Atas | CH 2 | 0° | 90° |
-| Corner D | Kanan Bawah | CH 3 | 0° | 90° |
+| Corner A | Kiri Atas | **CH 4** | 10° | 100° |
+| Corner B | Kiri Bawah | **CH 6** | 10° | 100° |
+| Corner C | Kanan Atas | **CH 8** | 10° | 100° |
+| Corner D | Kanan Bawah | **CH 9** | 10° | 100° |
+
+> **⚠️ Angles:** 10-100° (safe range, hindari 0°/180° yang menyebabkan servo hunting)
 
 #### **Lock Servos (2 servo)** - Mengunci Wadah
 | Servo | Posisi | Channel | LOCKED | UNLOCKED |
 |-------|--------|---------|---------|----------|
-| Lock Left | Tengah Kiri | CH 4 | 90° | 0° |
-| Lock Right | Tengah Kanan | CH 5 | 90° | 0° |
+| Lock Left | Tengah Kiri | **CH 0** | 90° | 10° |
+| Lock Right | Tengah Kanan | **CH 2** | 90° | 170° |
 
 **Konsep Locking:**
 - **LOCKED (90°)**: Servo arm horizontal di bawah wadah → menahan
@@ -79,7 +89,9 @@ python3 main.py
 ### **Layer 2 - Waste Selector (1 Servo)**
 | Servo | Channel | NEUTRAL | BIN A | BIN B |
 |-------|---------|---------|-------|-------|
-| Selector | CH 6 | 90° | 60° | 120° |
+| Selector | **CH 12** | 90° | 60° | 120° |
+
+> **✅ Total:** 7 servo positional MG996R (4 corners + 2 locks + 1 selector)
 
 ## 🔄 Alur Kerja Sorting (5 Fase)
 

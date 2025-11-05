@@ -619,7 +619,8 @@ class SevenServoHardware:
             print(f"\n[7ServoHW] 🔓 FASE 2: Unlocking and dropping waste container...")
             
             # Step 1: UNLOCK lock servos (buka pengunci)
-            print(f"[7ServoHW]    🔓 Step 1: UNLOCK both locks...")
+            # ✅ ENABLED: Ready for positional servos (MG996R)
+            print(f"[7ServoHW]    🔓 Step 1: Unlocking container (open locks)...")
             lock_moves = []
             if 'lock_left' in self.servos:
                 lock_moves.append(('lock_left', self.servos['lock_left']['unlocked']))
@@ -700,7 +701,8 @@ class SevenServoHardware:
             time.sleep(lift_time)
             
             # Step 3: LOCK lock servos kembali (kunci wadah di atas)
-            print(f"[7ServoHW]    🔒 Step 3: LOCK both locks (secure container)...")
+            # ✅ ENABLED: Ready for positional servos (MG996R)
+            print(f"[7ServoHW]    🔒 Step 3: Locking container (close locks)...")
             lock_moves = []
             if 'lock_left' in self.servos:
                 lock_moves.append(('lock_left', self.servos['lock_left']['locked']))
