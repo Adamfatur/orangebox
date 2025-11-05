@@ -98,6 +98,10 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     
     # GPIO and hardware libraries
     .venv/bin/pip install RPi.GPIO gpiozero
+
+    echo "Installing Adafruit Blinka and ServoKit for PCA9685..."
+    .venv/bin/pip install adafruit-blinka adafruit-circuitpython-servokit
+
     # Database and GPS
     .venv/bin/pip install pymysql pynmea2 pyserial python-dotenv
     # Adafruit libraries for PCA9685 servo control
