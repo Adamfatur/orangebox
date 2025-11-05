@@ -225,7 +225,7 @@ SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun setelah jatuh gravit
 #   LOCKED (90°)   → Servo arm horizontal di bawah wadah (menahan)
 #   UNLOCKED (0°)  → Servo arm vertikal (lepas, wadah bisa jatuh)
 
-# Mapping sesuai instruksi: 0 dan 2 → Servo Kunci A dan B
+# Mapping: 0 dan 2 → Servo Kunci A dan B
 SERVO_L1_LOCK_LEFT_CHANNEL = 0   # Servo Kunci A (atas tengah)
 SERVO_L1_LOCK_RIGHT_CHANNEL = 2  # Servo Kunci B (bawah tengah)
 
@@ -310,6 +310,12 @@ SERVO_OFFSET_SELECTOR = 0
 # Batasi maksimum ayunan (derajat) dari posisi netral untuk safety
 SERVO_MAX_SWING_LOCK_DEG = 90
 SERVO_MAX_SWING_CORNER_DEG = 90
+
+# Inisialisasi & shutdown behavior
+# False = jangan gerakkan servo saat startup; biarkan diam sampai fase sorting
+SERVO_INITIALIZE_AT_START = False
+# False = jangan reset posisi saat shutdown; hanya matikan PWM (anti-gerak)
+SERVO_RESET_ON_SHUTDOWN = False
 
 # ============================================
 # TIMING SETTINGS

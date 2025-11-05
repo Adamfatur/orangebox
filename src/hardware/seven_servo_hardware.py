@@ -166,8 +166,16 @@ class SevenServoHardware:
             # Apply calibration for MG996R/SG90
             self._apply_servokit_calibration()
             
-            # Initialize all servos to safe starting position
-            self._initialize_positions()
+            # Initialize all servos to safe starting position (optional)
+            if getattr(config, 'SERVO_INITIALIZE_AT_START', False):
+                self._initialize_positions()
+            else:
+                # Ensure PWM off at start (no movement)
+                try:
+                    for servo_id, cfg in self.servos.items():
+                        self.kit.servo[cfg['channel']].angle = None
+                except Exception:
+                    pass
             
             self.servos_active = True
             print("[7ServoHW] ✓ All servos initialized and ready")
@@ -679,8 +687,9 @@ class SevenServoHardware:
         print("\n[7ServoHW] 🛑 Shutting down...")
         
         try:
-            # Reset to safe position
-            self.reset_to_ready()
+            # Optional reset to safe position
+            if getattr(config, 'SERVO_RESET_ON_SHUTDOWN', False):
+                self.reset_to_ready()
             
             # Disable all PWM signals
             if HAS_SERVOKIT and self.kit is not None:
