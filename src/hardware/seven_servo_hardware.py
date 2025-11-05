@@ -215,10 +215,10 @@ class SevenServoHardware:
         
         # Layer 1 - Corner Servos (4 servo untuk sudut wadah)
         corner_channels = {
-            'corner_a': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_A_CHANNEL', 0)),  # Kiri atas
-            'corner_b': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_B_CHANNEL', 1)),  # Kiri bawah
-            'corner_c': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_C_CHANNEL', 2)),  # Kanan atas
-            'corner_d': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_D_CHANNEL', 3)),  # Kanan bawah
+            'corner_a': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_A_CHANNEL', 4)),  # Kiri atas
+            'corner_b': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_B_CHANNEL', 6)),  # Kiri bawah
+            'corner_c': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_C_CHANNEL', 8)),  # Kanan atas
+            'corner_d': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_D_CHANNEL', 9)),  # Kanan bawah
         }
         
         corner_up = getattr(config, 'SERVO_L1_CORNER_UP', 0)
@@ -246,8 +246,8 @@ class SevenServoHardware:
         
         # Layer 1 - Lock Servos (2 servo pengunci)
         lock_channels = {
-            'lock_left': _normalize_channel(getattr(config, 'SERVO_L1_LOCK_LEFT_CHANNEL', 4)),
-            'lock_right': _normalize_channel(getattr(config, 'SERVO_L1_LOCK_RIGHT_CHANNEL', 5)),
+            'lock_left': _normalize_channel(getattr(config, 'SERVO_L1_LOCK_LEFT_CHANNEL', 0)),
+            'lock_right': _normalize_channel(getattr(config, 'SERVO_L1_LOCK_RIGHT_CHANNEL', 2)),
         }
         
         lock_locked = getattr(config, 'SERVO_L1_LOCK_LOCKED', 90)
@@ -287,7 +287,7 @@ class SevenServoHardware:
                 print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (LOCKED={locked_angle}°, UNLOCKED={unlocked_angle}°)")
         
         # Layer 2 - Selector Servo (1 servo pemilah)
-        selector_channel = _normalize_channel(getattr(config, 'SERVO_L2_SELECTOR_CHANNEL', 6))
+        selector_channel = _normalize_channel(getattr(config, 'SERVO_L2_SELECTOR_CHANNEL', 12))
         
         if selector_channel is not None:
             self.servos['selector'] = {
