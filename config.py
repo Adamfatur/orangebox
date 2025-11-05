@@ -235,12 +235,12 @@ SERVO_L1_LOCK_LOCKED = 90        # LOCKED: Horizontal, menahan wadah di atas
 SERVO_L1_LOCK_UNLOCKED = 0       # UNLOCKED: Vertikal, lepas agar wadah jatuh
 
 # Kustom per-servo sesuai arah fisik:
-# - Servo Kunci A: posisi awal horizontal (LOCKED=90°), "naik 90°" → vertikal (UNLOCKED=180°)
-# - Servo Kunci B: sebaliknya → UNLOCKED=0°
+# ⚠️ TEMPORARY FIX: Balik arah jika servo berputar 360°
+# Coba konfigurasi ini dulu untuk menghindari batas mekanis
 SERVO_L1_LOCK_LEFT_LOCKED = 90
-SERVO_L1_LOCK_LEFT_UNLOCKED = 180
+SERVO_L1_LOCK_LEFT_UNLOCKED = 0   # ← DIBALIK dari 180° ke 0°
 SERVO_L1_LOCK_RIGHT_LOCKED = 90
-SERVO_L1_LOCK_RIGHT_UNLOCKED = 0
+SERVO_L1_LOCK_RIGHT_UNLOCKED = 180  # ← DIBALIK dari 0° ke 180°
 
 # ──────────────────────────────────────────
 # Layer 2 - Selector Servo (1 servo)

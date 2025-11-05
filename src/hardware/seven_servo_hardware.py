@@ -596,9 +596,19 @@ class SevenServoHardware:
             print(f"[7ServoHW]    ⏱ Lock delay {lock_delay}s...")
             time.sleep(lock_delay)
             
-            # Wadah akan jatuh OTOMATIS karena gravitasi
-            # Corner servos tetap di posisi UP (0°), tidak perlu gerak
-            print(f"[7ServoHW]    ↓ Waste container dropping by GRAVITY...")
+            # ⚠️ FIX: Corner servos HARUS AKTIF DITURUNKAN (tidak ada gravitasi otomatis!)
+            # Turunkan ALL corner servos SIMULTANEOUSLY (UP → DOWN)
+            print(f"[7ServoHW]    ↓ Lowering ALL 4 corners simultaneously (UP→DOWN)...")
+            corner_moves = []
+            for corner in ['corner_a', 'corner_b', 'corner_c', 'corner_d']:
+                if corner in self.servos:
+                    corner_moves.append((corner, self.servos[corner]['down']))
+            
+            # Execute lowering in parallel for synchronized motion
+            if corner_moves:
+                self._move_multiple_servos_parallel(corner_moves)
+            
+            print(f"[7ServoHW]    ✓ Waste container lowered!")
             
             # ═══════════════════════════════════════════════════════════
             # FASE 3: WAITING FOR WASTE TO FALL
