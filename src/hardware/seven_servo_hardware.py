@@ -251,13 +251,17 @@ class SevenServoHardware:
                 corner_up = corner_angles[name]['up']
                 corner_down = corner_angles[name]['down']
                 
-                # Enforce max swing (exactly 90° by default)
-                delta_corner = corner_down - corner_up
-                if abs(delta_corner) != max_corner_swing:
-                    sign = 1 if delta_corner >= 0 else -1
-                    adjusted = corner_up + sign * max_corner_swing
-                    print(f"[7ServoHW] • Adjust {name} swing: {corner_up}→{corner_down} (Δ{delta_corner}°) → {corner_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
-                    corner_down = adjusted
+                # ⚠️ CRITICAL FIX (Gemini Pro 2.5): HAPUS "Enforce max swing" logic!
+                # Logic ini MEMAKSA penggunaan nilai ekstrem 0°/180° yang menyebabkan 360° rotation.
+                # Biarkan config.py yang menentukan angle (gunakan nilai aman 10-170°).
+                # 
+                # DISABLED CODE (penyebab bug):
+                # delta_corner = corner_down - corner_up
+                # if abs(delta_corner) != max_corner_swing:
+                #     sign = 1 if delta_corner >= 0 else -1
+                #     adjusted = corner_up + sign * max_corner_swing
+                #     print(f"[7ServoHW] • Adjust {name} swing: {corner_up}→{corner_down} (Δ{delta_corner}°) → {corner_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
+                #     corner_down = adjusted
                 
                 self.servos[name] = {
                     'name': f'Layer 1 {name.upper()}',
@@ -296,13 +300,20 @@ class SevenServoHardware:
                     locked_angle = lock_locked
                     unlocked_angle = lock_unlocked
 
-                # Enforce max swing (e.g., exactly 90° movement from locked)
-                delta = unlocked_angle - locked_angle
-                if abs(delta) != max_lock_swing:
-                    sign = 1 if delta >= 0 else -1
-                    adjusted = locked_angle + sign * max_lock_swing
-                    print(f"[7ServoHW] • Adjust {name} swing: {locked_angle}→{unlocked_angle} (Δ{delta}°) → {locked_angle}→{adjusted} (Δ{sign*max_lock_swing}°)")
-                    unlocked_angle = adjusted
+                # ⚠️ CRITICAL FIX (Gemini Pro 2.5): HAPUS "Enforce max swing" logic!
+                # Logic ini adalah ROOT CAUSE dari 360° rotation bug!
+                # Contoh masalah:
+                #   - User set UNLOCKED=10° (aman) untuk 80° swing
+                #   - Logic ini paksa jadi: adjusted = 90 + (-1 * 90) = 0° (BERBAHAYA!)
+                #   - Servo hunting di 0° → berputar 360° tanpa henti
+                # 
+                # DISABLED CODE (penyebab bug):
+                # delta = unlocked_angle - locked_angle
+                # if abs(delta) != max_lock_swing:
+                #     sign = 1 if delta >= 0 else -1
+                #     adjusted = locked_angle + sign * max_lock_swing
+                #     print(f"[7ServoHW] • Adjust {name} swing: {locked_angle}→{unlocked_angle} (Δ{delta}°) → {locked_angle}→{adjusted} (Δ{sign*max_lock_swing}°)")
+                #     unlocked_angle = adjusted
 
                 self.servos[name] = {
                     'name': f'Layer 1 {name.upper()}',

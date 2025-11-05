@@ -196,9 +196,10 @@ PROXIMITY_SENSOR_PIN = 17      # GPIO Pin untuk proximity sensor (jika enabled)
 SERVO_DRIVER = 'seven_servo'
 
 # Kalibrasi ServoKit (untuk MG996R/SG90 dsb.)
-# Jika servo berputar liar/nyaris 360°, lebarkan rentang pulsa atau sesuaikan sesuai spesifikasi.
-SERVOKIT_MIN_PULSE_MICROS = 500   # default aman 500µs
-SERVOKIT_MAX_PULSE_MICROS = 2500  # default aman 2500µs
+# ⚠️ FIX: Kurangi rentang pulse untuk mencegah over-rotation (standar MG996R: 1000-2000µs)
+# Range sempit = lebih presisi, hindari servo "hunting" di batas ekstrem
+SERVOKIT_MIN_PULSE_MICROS = 750   # ← Naikkan dari 500µs (lebih aman)
+SERVOKIT_MAX_PULSE_MICROS = 2250  # ← Turunkan dari 2500µs (lebih aman)
 SERVOKIT_ACTUATION_RANGE = 180    # derajat total
 
 # ──────────────────────────────────────────
@@ -222,9 +223,11 @@ SERVO_L1_CORNER_C_CHANNEL = 8    # Channel PCA9685 - Sudut C (Kanan Atas)
 SERVO_L1_CORNER_D_CHANNEL = 9    # Channel PCA9685 - Sudut D (Kanan Bawah)
 
 # Global default (untuk servo dengan rotasi CW seperti D)
-# ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
-SERVO_L1_CORNER_UP = 0           # Posisi UP (wadah terangkat, siap terima sampah)
-SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun 90° dari UP)
+# ⚠️ CRITICAL SAFETY FIX (Gemini Pro 2.5): JANGAN gunakan 0° atau 180°!
+# Servo punya batas mekanis di ~5° dan ~175°. Nilai 0°/180° menyebabkan "servo hunting" → 360° rotation.
+# Gunakan 10° dan 100° (90° swing) untuk menghindari batas mekanis.
+SERVO_L1_CORNER_UP = 10           # Posisi UP (wadah terangkat) - AMAN, jauh dari 0°
+SERVO_L1_CORNER_DOWN = 100        # Posisi DOWN (90° swing dari UP) - AMAN, jauh dari 180°
 
 # Per-servo angles (untuk servo yang arahnya berbeda)
 # Set None untuk menggunakan default di atas, atau override dengan nilai spesifik
@@ -234,20 +237,20 @@ SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun 90° dari UP)
 #   → Balik nilai UP/DOWN untuk servo tersebut (90 ↔ 0)
 # 
 # KONFIGURASI BERDASARKAN POSISI FISIK:
-#   Servo A (Kiri Bawah)  → Searah jarum jam (CW):  UP=0°, DOWN=90°
-#   Servo B (Kiri Atas)   → Berlawanan arah (CCW):  UP=90°, DOWN=0°
-#   Servo C (Kanan Atas)  → Berlawanan arah (CCW):  UP=90°, DOWN=0°
-#   Servo D (Kanan Bawah) → Searah jarum jam (CW):  UP=0°, DOWN=90°
-SERVO_L1_CORNER_A_UP = None      # CW: gunakan default (UP=0°, DOWN=90°)
+#   Servo A (Kiri Bawah)  → Searah jarum jam (CW):  UP=10°, DOWN=100°
+#   Servo B (Kiri Atas)   → Berlawanan arah (CCW):  UP=100°, DOWN=10°
+#   Servo C (Kanan Atas)  → Berlawanan arah (CCW):  UP=100°, DOWN=10°
+#   Servo D (Kanan Bawah) → Searah jarum jam (CW):  UP=10°, DOWN=100°
+SERVO_L1_CORNER_A_UP = None      # CW: gunakan default (UP=10°, DOWN=100°)
 SERVO_L1_CORNER_A_DOWN = None
 
-SERVO_L1_CORNER_B_UP = 90        # CCW: balik arah (UP=90°, DOWN=0°)
-SERVO_L1_CORNER_B_DOWN = 0
+SERVO_L1_CORNER_B_UP = 100       # CCW: balik arah (UP=100°, DOWN=10°)
+SERVO_L1_CORNER_B_DOWN = 10
 
-SERVO_L1_CORNER_C_UP = 90        # CCW: balik arah (UP=90°, DOWN=0°)
-SERVO_L1_CORNER_C_DOWN = 0
+SERVO_L1_CORNER_C_UP = 100       # CCW: balik arah (UP=100°, DOWN=10°)
+SERVO_L1_CORNER_C_DOWN = 10
 
-SERVO_L1_CORNER_D_UP = None      # CW: gunakan default (UP=0°, DOWN=90°)
+SERVO_L1_CORNER_D_UP = None      # CW: gunakan default (UP=10°, DOWN=100°)
 SERVO_L1_CORNER_D_DOWN = None
 
 # ──────────────────────────────────────────
@@ -264,17 +267,20 @@ SERVO_L1_LOCK_LEFT_CHANNEL = 0   # Servo Kunci A (atas tengah)
 SERVO_L1_LOCK_RIGHT_CHANNEL = 2  # Servo Kunci B (bawah tengah)
 
 # Global default (fallback) - tetap disediakan untuk kompatibilitas
-# ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
+# ⚠️ CRITICAL SAFETY FIX (Gemini Pro 2.5): JANGAN gunakan 0° atau 180°!
+# Nilai ekstrem menyebabkan servo "hunting" (mencari posisi yang tidak bisa dicapai) → 360° rotation.
+# Gunakan 10° (80° swing CCW) atau 170° (80° swing CW) sebagai gantinya.
 SERVO_L1_LOCK_LOCKED = 90        # LOCKED: Horizontal, menahan wadah di atas
-SERVO_L1_LOCK_UNLOCKED = 0       # UNLOCKED: Vertikal, lepas agar wadah jatuh
+SERVO_L1_LOCK_UNLOCKED = 10      # UNLOCKED: 80° swing CCW (AMAN, jauh dari 0°)
 
 # Kustom per-servo sesuai arah fisik:
-# ⚠️ TEMPORARY FIX: Balik arah jika servo berputar 360°
-# Coba konfigurasi ini dulu untuk menghindari batas mekanis
+# ⚠️ FIX KRUSIAL: Kedua lock sekarang menggunakan nilai aman (10° dan 170°)
+# Lock Left = 80° swing CCW (90° → 10°)
+# Lock Right = 80° swing CW (90° → 170°)
 SERVO_L1_LOCK_LEFT_LOCKED = 90
-SERVO_L1_LOCK_LEFT_UNLOCKED = 0   # ← DIBALIK dari 180° ke 0°
+SERVO_L1_LOCK_LEFT_UNLOCKED = 10    # ← AMAN: 80° swing CCW, jauh dari 0°
 SERVO_L1_LOCK_RIGHT_LOCKED = 90
-SERVO_L1_LOCK_RIGHT_UNLOCKED = 180  # ← DIBALIK dari 0° ke 180°
+SERVO_L1_LOCK_RIGHT_UNLOCKED = 170  # ← FIX KRUSIAL: Ganti dari 180° ke 170° (AMAN!)
 
 # ──────────────────────────────────────────
 # Layer 2 - Selector Servo (1 servo)
@@ -308,9 +314,10 @@ SERVO_RESET_DELAY = 0.3         # Jeda setelah pemilah balik ke netral
 SERVO_MOVEMENT_TIME = 0.15      # Waktu servo sampai ke posisi target
 
 # Stagger delay (ms) antar servo saat gerak bersamaan untuk kurangi puncak arus
-# 0 = semua start bersamaan secara PARALLEL (recommended untuk 7-servo)
-# 5-10 = sedikit stagger untuk distribusi daya lebih baik
-SERVO_STAGGER_DELAY_MS = 0
+# ⚠️ FIX: Tambah stagger 30ms untuk stabilkan power supply saat parallel movement
+# 0 = semua start bersamaan (spike arus besar!)
+# 30-50 = distribusi daya lebih baik, kurangi voltage drop
+SERVO_STAGGER_DELAY_MS = 30  # ← Naikkan dari 0 untuk anti-spike
 
 # ============================================
 # PENGATURAN TEKNIS (Jangan diubah kalau tidak yakin)
@@ -346,8 +353,9 @@ SERVO_OFFSET_CORNER_D = 0
 SERVO_OFFSET_SELECTOR = 0
 
 # Batasi maksimum ayunan (derajat) dari posisi netral untuk safety
-SERVO_MAX_SWING_LOCK_DEG = 90
-SERVO_MAX_SWING_CORNER_DEG = 90
+# ⚠️ FIX: Kurangi max swing untuk mencegah over-rotation di batas mekanis
+SERVO_MAX_SWING_LOCK_DEG = 80     # ← Kurangi dari 90° untuk margin safety
+SERVO_MAX_SWING_CORNER_DEG = 80   # ← Kurangi dari 90° untuk margin safety
 
 # Inisialisasi & shutdown behavior
 # False = jangan gerakkan servo saat startup; biarkan diam sampai fase sorting
