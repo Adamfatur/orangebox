@@ -170,6 +170,7 @@ echo ""
 # Auto-detect available cameras
 echo "Detecting available cameras..."
 CAMERAS=()
+PICAM_AVAILABLE=0
 
 # Use appropriate Python based on platform
 if [[ "$PLATFORM" == "rpi" ]]; then
@@ -180,19 +181,46 @@ if [[ "$PLATFORM" == "rpi" ]]; then
         echo "⚠️  OpenCV not yet available in venv, using system Python for detection"
         PYTHON_CMD="python3"
     fi
+    
+    # Prefer Raspberry Pi Camera Module via Picamera2 when available
+    if $PYTHON_CMD - << 'PYCODE'
+try:
+    from picamera2 import Picamera2
+    try:
+        cams = Picamera2.global_camera_info()
+    except Exception:
+        cams = []
+    if cams:
+        print("PICAM2_FOUND")
+    else:
+        # Fallback: try instantiation
+        try:
+            cam = Picamera2(); cam.close(); print("PICAM2_FOUND")
+        except Exception:
+            pass
+except Exception:
+    pass
+PYCODE
+    then
+        PICAM_AVAILABLE=1
+        echo "✅ Raspberry Pi Camera Module detected (Picamera2)."
+        echo "   Using Picamera2 backend; skipping V4L2 index selection."
+    fi
 else
     PYTHON_CMD="python3"
 fi
 
-# Try OpenCV-based detection first
-for i in {0..5}; do
-    if $PYTHON_CMD -c "import cv2; cap = cv2.VideoCapture($i); ret, _ = cap.read(); cap.release(); exit(0 if ret else 1)" 2>/dev/null; then
-        CAMERAS+=($i)
-    fi
-done
+if [ $PICAM_AVAILABLE -eq 0 ]; then
+    # Try OpenCV-based detection first (USB webcams)
+    for i in {0..5}; do
+        if $PYTHON_CMD -c "import cv2; cap = cv2.VideoCapture($i); ret, _ = cap.read(); cap.release(); exit(0 if ret else 1)" 2>/dev/null; then
+            CAMERAS+=($i)
+        fi
+    done
+fi
 
 # Fallback: If no cameras found with OpenCV, try v4l2 on Raspberry Pi
-if [ ${#CAMERAS[@]} -eq 0 ] && [[ "$PLATFORM" == "rpi" ]]; then
+if [ ${#CAMERAS[@]} -eq 0 ] && [[ "$PLATFORM" == "rpi" ]] && [ $PICAM_AVAILABLE -eq 0 ]; then
     echo "⚠️  OpenCV detection failed, trying v4l2 fallback..."
     
     # Check for video devices
@@ -215,7 +243,7 @@ if [ ${#CAMERAS[@]} -eq 0 ] && [[ "$PLATFORM" == "rpi" ]]; then
 fi
 
 # If still no cameras, provide helpful troubleshooting
-if [ ${#CAMERAS[@]} -eq 0 ]; then
+if [ ${#CAMERAS[@]} -eq 0 ] && [ $PICAM_AVAILABLE -eq 0 ]; then
     echo "❌ No cameras detected!"
     echo ""
     echo "Troubleshooting steps:"
@@ -243,7 +271,7 @@ if [ ${#CAMERAS[@]} -eq 0 ]; then
     echo "⚠️  Continuing with default camera index 0"
     echo "    You can change this later in config.py"
     CAMERA_INDEX=0
-else
+elif [ $PICAM_AVAILABLE -eq 0 ]; then
     echo "✅ Found cameras at index: ${CAMERAS[*]}"
     echo ""
     
@@ -269,6 +297,9 @@ else
             fi
         done
     fi
+else
+    # Picamera2 present; we won't ask for an index
+    CAMERA_INDEX=0
 fi
 
 echo ""
@@ -314,9 +345,30 @@ print('✅ Configuration updated')
 
 echo ""
 
-# Test camera
 echo "🧪 Testing camera..."
-if $PYTHON_CMD -c "
+if [ $PICAM_AVAILABLE -eq 1 ]; then
+    if $PYTHON_CMD - << 'PYCODE'
+try:
+    from picamera2 import Picamera2
+    cam = Picamera2()
+    cam.configure(cam.create_still_configuration(main={"size": (640,480), "format": "RGB888"}))
+    cam.start()
+    import time; time.sleep(0.5)
+    arr = cam.capture_array()
+    cam.close()
+    print(f"✅ PiCamera2 working: {arr.shape[1]}x{arr.shape[0]}")
+except Exception as e:
+    print(f"❌ PiCamera2 test failed: {e}")
+    raise
+PYCODE
+    then
+        echo "✅ Camera test passed (PiCamera2)"
+    else
+        echo "❌ Camera test failed (PiCamera2)"
+        exit 1
+    fi
+else
+    if $PYTHON_CMD -c "
 import cv2
 import sys
 
@@ -334,11 +386,12 @@ height, width = frame.shape[:2]
 print(f'✅ Camera working: {width}x{height}')
 cap.release()
 "; then
-    echo "✅ Camera test passed"
-else
-    echo "❌ Camera test failed"
-    echo "Please check your camera connection and try again."
-    exit 1
+        echo "✅ Camera test passed"
+    else
+        echo "❌ Camera test failed"
+        echo "Please check your camera connection and try again."
+        exit 1
+    fi
 fi
 
 echo ""
@@ -349,7 +402,11 @@ echo "========================"
 echo ""
 echo "Configuration Summary:"
 echo "  Platform: $PLATFORM"
-echo "  Camera Index: $CAMERA_INDEX"
+if [ $PICAM_AVAILABLE -eq 1 ]; then
+    echo "  Camera: Raspberry Pi Camera (Picamera2 auto)"
+else
+    echo "  Camera Index: $CAMERA_INDEX"
+fi
 if [[ "$PLATFORM" == "rpi" ]]; then
     echo "  GPS: Enabled"
     echo "  Servos: Auto-detect enabled"
