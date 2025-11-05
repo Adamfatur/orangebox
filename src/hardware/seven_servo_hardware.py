@@ -239,15 +239,26 @@ class SevenServoHardware:
         
         for name, channel in lock_channels.items():
             if channel is not None:
+                # Per-servo overrides for lock angles (support opposite directions)
+                if name == 'lock_left':
+                    locked_angle = getattr(config, 'SERVO_L1_LOCK_LEFT_LOCKED', lock_locked)
+                    unlocked_angle = getattr(config, 'SERVO_L1_LOCK_LEFT_UNLOCKED', lock_unlocked)
+                elif name == 'lock_right':
+                    locked_angle = getattr(config, 'SERVO_L1_LOCK_RIGHT_LOCKED', lock_locked)
+                    unlocked_angle = getattr(config, 'SERVO_L1_LOCK_RIGHT_UNLOCKED', lock_unlocked)
+                else:
+                    locked_angle = lock_locked
+                    unlocked_angle = lock_unlocked
+
                 self.servos[name] = {
                     'name': f'Layer 1 {name.upper()}',
                     'channel': channel,
-                    'locked': lock_locked,
-                    'unlocked': lock_unlocked,
+                    'locked': locked_angle,
+                    'unlocked': unlocked_angle,
                     'current_angle': None,
                     'last_move_time': 0
                 }
-                print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (LOCKED={lock_locked}°, UNLOCKED={lock_unlocked}°)")
+                print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (LOCKED={locked_angle}°, UNLOCKED={unlocked_angle}°)")
         
         # Layer 2 - Selector Servo (1 servo pemilah)
         selector_channel = _normalize_channel(getattr(config, 'SERVO_L2_SELECTOR_CHANNEL', 6))
@@ -324,21 +335,45 @@ class SevenServoHardware:
         if not isinstance(angle, (int, float)):
             print(f"[7ServoHW] ❌ SAFETY: Invalid angle type {type(angle)} for '{servo_id}'")
             return False
-            
-        if angle < 0 or angle > 180:
-            print(f"[7ServoHW] ❌ SAFETY VIOLATION: Angle {angle}° out of range (0-180°)")
-            print(f"[7ServoHW]    Servo '{servo_id}' will NOT move - preventing damage!")
-            return False
+        
+        # Apply optional per-servo offset and clamp
+        offset = self._get_offset(servo_id)
+        target = angle + offset
+        if target < 0 or target > 180:
+            clamped = max(0, min(180, target))
+            print(f"[7ServoHW] ⚠ Angle {angle}° + offset {offset:+}° → {target}° clamped to {clamped}° for '{servo_id}'")
+            target = clamped
         
         cfg = self.servos[servo_id]
         channel = cfg['channel']
         
         # Update tracking
-        cfg['current_angle'] = angle
+        cfg['current_angle'] = target
         cfg['last_move_time'] = time.time()
         
         # Execute movement
-        return self._move_channel(channel, angle)
+        return self._move_channel(channel, target)
+
+    def _get_offset(self, servo_id):
+        """Return per-servo angle offset from config (degrees)."""
+        try:
+            if servo_id == 'lock_left':
+                return getattr(config, 'SERVO_OFFSET_LOCK_LEFT', 0)
+            if servo_id == 'lock_right':
+                return getattr(config, 'SERVO_OFFSET_LOCK_RIGHT', 0)
+            if servo_id == 'corner_a':
+                return getattr(config, 'SERVO_OFFSET_CORNER_A', 0)
+            if servo_id == 'corner_b':
+                return getattr(config, 'SERVO_OFFSET_CORNER_B', 0)
+            if servo_id == 'corner_c':
+                return getattr(config, 'SERVO_OFFSET_CORNER_C', 0)
+            if servo_id == 'corner_d':
+                return getattr(config, 'SERVO_OFFSET_CORNER_D', 0)
+            if servo_id == 'selector':
+                return getattr(config, 'SERVO_OFFSET_SELECTOR', 0)
+        except Exception:
+            pass
+        return 0
 
     def _move_channel(self, channel, angle):
         """
@@ -641,6 +676,22 @@ class SevenServoHardware:
             
         except Exception as e:
             print(f"[7ServoHW] ⚠ Cleanup warning: {e}")
+
+    def center_all_servos(self, angle: float = 90.0):
+        """Move all servos to a common center angle (default 90°) for calibration.
+        Note: This is for horn alignment; ensure mechanical clearance.
+        """
+        print(f"\n[7ServoHW] 🎯 Centering all servos to {angle}° for calibration...")
+        try:
+            moves = []
+            for sid in ['corner_a','corner_b','corner_c','corner_d','lock_left','lock_right','selector']:
+                if sid in self.servos:
+                    moves.append((sid, angle))
+            if moves:
+                self._move_multiple_servos_parallel(moves)
+            print("[7ServoHW] ✓ All servos centered")
+        except Exception as e:
+            print(f"[7ServoHW] ⚠ Centering warning: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════

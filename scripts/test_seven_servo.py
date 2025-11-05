@@ -239,6 +239,7 @@ def main():
         print("4. Test individual servos")
         print("5. Reset to ready position")
         print("6. Show configuration")
+        print("7. Center all servos to 90° (calibration)")
         print("q. Quit")
         print("="*70)
         
@@ -262,6 +263,13 @@ def main():
             test_reset(hw)
         elif choice == '6':
             print_configuration()
+        elif choice == '7':
+            try:
+                center = input("Center angle [90]: ").strip()
+                center = float(center) if center else 90.0
+                hw.center_all_servos(center)
+            except Exception as e:
+                print(f"❌ Error: {e}")
         elif choice == 'q':
             break
         else:

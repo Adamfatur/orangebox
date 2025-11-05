@@ -206,10 +206,11 @@ SERVOKIT_ACTUATION_RANGE = 180    # derajat total
 # ──────────────────────────────────────────
 # Fungsi: Mengangkat dan menurunkan wadah di setiap sudut
 
-SERVO_L1_CORNER_A_CHANNEL = 0    # Channel PCA9685 - Sudut A (Kiri Atas)
-SERVO_L1_CORNER_B_CHANNEL = 2    # Channel PCA9685 - Sudut B (Kiri Bawah)
-SERVO_L1_CORNER_C_CHANNEL = 4    # Channel PCA9685 - Sudut C (Kanan Atas)
-SERVO_L1_CORNER_D_CHANNEL = 6    # Channel PCA9685 - Sudut D (Kanan Bawah)
+# Mapping sesuai instruksi: 4,6,8,9 → A,B,C,D
+SERVO_L1_CORNER_A_CHANNEL = 4    # Channel PCA9685 - Sudut A (Kiri Atas)
+SERVO_L1_CORNER_B_CHANNEL = 6    # Channel PCA9685 - Sudut B (Kiri Bawah)
+SERVO_L1_CORNER_C_CHANNEL = 8    # Channel PCA9685 - Sudut C (Kanan Atas)
+SERVO_L1_CORNER_D_CHANNEL = 9    # Channel PCA9695 - Sudut D (Kanan Bawah)
 
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
 SERVO_L1_CORNER_UP = 0           # Posisi UP (wadah terangkat, siap terima sampah)
@@ -220,22 +221,33 @@ SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun setelah jatuh gravit
 # ──────────────────────────────────────────
 # Fungsi: Mengunci wadah di posisi atas (mencegah jatuh)
 # 
-# Konsep Locking:
+# Konsep Locking (umum):
 #   LOCKED (90°)   → Servo arm horizontal di bawah wadah (menahan)
 #   UNLOCKED (0°)  → Servo arm vertikal (lepas, wadah bisa jatuh)
 
-SERVO_L1_LOCK_LEFT_CHANNEL = 8   # Channel PCA9685 - Lock Kiri (tengah sisi kiri)
-SERVO_L1_LOCK_RIGHT_CHANNEL = 10 # Channel PCA9685 - Lock Kanan (tengah sisi kanan)
+# Mapping sesuai instruksi: 0 dan 2 → Servo Kunci A dan B
+SERVO_L1_LOCK_LEFT_CHANNEL = 0   # Servo Kunci A (atas tengah)
+SERVO_L1_LOCK_RIGHT_CHANNEL = 2  # Servo Kunci B (bawah tengah)
 
+# Global default (fallback) - tetap disediakan untuk kompatibilitas
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
 SERVO_L1_LOCK_LOCKED = 90        # LOCKED: Horizontal, menahan wadah di atas
 SERVO_L1_LOCK_UNLOCKED = 0       # UNLOCKED: Vertikal, lepas agar wadah jatuh
+
+# Kustom per-servo sesuai arah fisik:
+# - Servo Kunci A: posisi awal horizontal (LOCKED=90°), "naik 90°" → vertikal (UNLOCKED=180°)
+# - Servo Kunci B: sebaliknya → UNLOCKED=0°
+SERVO_L1_LOCK_LEFT_LOCKED = 90
+SERVO_L1_LOCK_LEFT_UNLOCKED = 180
+SERVO_L1_LOCK_RIGHT_LOCKED = 90
+SERVO_L1_LOCK_RIGHT_UNLOCKED = 0
 
 # ──────────────────────────────────────────
 # Layer 2 - Selector Servo (1 servo)
 # ──────────────────────────────────────────
 # Fungsi: Memilah sampah ke Bin A (Organik) atau Bin B (Anorganik)
 
+# Mapping sesuai instruksi: 12 → Selector (Layer 2)
 SERVO_L2_SELECTOR_CHANNEL = 12   # Channel PCA9685 - Pemilah
 
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
@@ -281,6 +293,19 @@ PCA_CHANNELS_ONE_INDEXED = False # Set True jika papan Anda dilabeli 1-16 (bukan
 
 # Debug timing untuk verifikasi gerakan paralel (print timestamp start/done per servo)
 SERVO_DEBUG_TIMING = False
+
+# ──────────────────────────────────────────
+# Servo Angle Offsets (kalibrasi halus per-servo)
+# ──────────────────────────────────────────
+# Gunakan ini untuk menggeser sudut servo tertentu jika horn tidak bisa dipasang tepat 90°.
+# Nilai positif memutar searah jarum jam; negatif berlawanan. Satuan: derajat.
+SERVO_OFFSET_LOCK_LEFT = 0
+SERVO_OFFSET_LOCK_RIGHT = 0
+SERVO_OFFSET_CORNER_A = 0
+SERVO_OFFSET_CORNER_B = 0
+SERVO_OFFSET_CORNER_C = 0
+SERVO_OFFSET_CORNER_D = 0
+SERVO_OFFSET_SELECTOR = 0
 
 # ============================================
 # TIMING SETTINGS
