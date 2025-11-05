@@ -221,19 +221,44 @@ class SevenServoHardware:
             'corner_d': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_D_CHANNEL', 9)),  # Kanan bawah
         }
         
-        corner_up = getattr(config, 'SERVO_L1_CORNER_UP', 0)
-        corner_down = getattr(config, 'SERVO_L1_CORNER_DOWN', 90)
+        # Global default angles
+        corner_up_default = getattr(config, 'SERVO_L1_CORNER_UP', 0)
+        corner_down_default = getattr(config, 'SERVO_L1_CORNER_DOWN', 90)
         max_corner_swing = getattr(config, 'SERVO_MAX_SWING_CORNER_DEG', 90)
-        # Enforce max swing for corners (exactly 90° by default)
-        delta_corner = corner_down - corner_up
-        if abs(delta_corner) != max_corner_swing:
-            sign = 1 if delta_corner >= 0 else -1
-            adjusted = corner_up + sign * max_corner_swing
-            print(f"[7ServoHW] • Adjust corners swing: {corner_up}→{corner_down} (Δ{delta_corner}°) → {corner_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
-            corner_down = adjusted
+        
+        # Per-servo angle configuration (support different rotation directions)
+        corner_angles = {
+            'corner_a': {
+                'up': getattr(config, 'SERVO_L1_CORNER_A_UP', None) or corner_up_default,
+                'down': getattr(config, 'SERVO_L1_CORNER_A_DOWN', None) or corner_down_default,
+            },
+            'corner_b': {
+                'up': getattr(config, 'SERVO_L1_CORNER_B_UP', None) or corner_up_default,
+                'down': getattr(config, 'SERVO_L1_CORNER_B_DOWN', None) or corner_down_default,
+            },
+            'corner_c': {
+                'up': getattr(config, 'SERVO_L1_CORNER_C_UP', None) or corner_up_default,
+                'down': getattr(config, 'SERVO_L1_CORNER_C_DOWN', None) or corner_down_default,
+            },
+            'corner_d': {
+                'up': getattr(config, 'SERVO_L1_CORNER_D_UP', None) or corner_up_default,
+                'down': getattr(config, 'SERVO_L1_CORNER_D_DOWN', None) or corner_down_default,
+            },
+        }
         
         for name, channel in corner_channels.items():
             if channel is not None:
+                corner_up = corner_angles[name]['up']
+                corner_down = corner_angles[name]['down']
+                
+                # Enforce max swing (exactly 90° by default)
+                delta_corner = corner_down - corner_up
+                if abs(delta_corner) != max_corner_swing:
+                    sign = 1 if delta_corner >= 0 else -1
+                    adjusted = corner_up + sign * max_corner_swing
+                    print(f"[7ServoHW] • Adjust {name} swing: {corner_up}→{corner_down} (Δ{delta_corner}°) → {corner_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
+                    corner_down = adjusted
+                
                 self.servos[name] = {
                     'name': f'Layer 1 {name.upper()}',
                     'channel': channel,
@@ -242,7 +267,10 @@ class SevenServoHardware:
                     'current_angle': None,
                     'last_move_time': 0
                 }
-                print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (UP={corner_up}°, DOWN={corner_down}°)")
+                
+                # Tampilkan info arah rotasi
+                rotation_dir = "CW" if corner_down > corner_up else "CCW"
+                print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (UP={corner_up}°, DOWN={corner_down}°) [{rotation_dir}]")
         
         # Layer 1 - Lock Servos (2 servo pengunci)
         lock_channels = {
@@ -575,106 +603,115 @@ class SevenServoHardware:
             time.sleep(drop_delay)
             
             # ═══════════════════════════════════════════════════════════
-            # FASE 2: UNLOCK & DROP
+            # FASE 2: UNLOCK & DROP WADAH
             # ═══════════════════════════════════════════════════════════
-            print(f"\n[7ServoHW] 🔓 FASE 2: Unlocking and dropping waste...")
+            print(f"\n[7ServoHW] 🔓 FASE 2: Unlocking and dropping waste container...")
             
-            # Unlock BOTH lock servos SIMULTANEOUSLY
-            print(f"[7ServoHW]    → Unlocking BOTH locks simultaneously...")
+            # Step 1: UNLOCK lock servos (buka pengunci)
+            print(f"[7ServoHW]    🔓 Step 1: UNLOCK both locks...")
             lock_moves = []
             if 'lock_left' in self.servos:
                 lock_moves.append(('lock_left', self.servos['lock_left']['unlocked']))
             if 'lock_right' in self.servos:
                 lock_moves.append(('lock_right', self.servos['lock_right']['unlocked']))
             
-            # Execute unlock in parallel for synchronized motion
             if lock_moves:
                 self._move_multiple_servos_parallel(lock_moves)
             
-            # Short delay for unlock to complete
+            # Step 2: TUNGGU/JEDA setelah unlock (PENTING!)
             lock_delay = getattr(config, 'SERVO_LOCK_DELAY', 0.1)
-            print(f"[7ServoHW]    ⏱ Lock delay {lock_delay}s...")
+            print(f"[7ServoHW]    ⏱ Step 2: Wait {lock_delay}s after unlock...")
             time.sleep(lock_delay)
             
-            # ⚠️ FIX: Corner servos HARUS AKTIF DITURUNKAN (tidak ada gravitasi otomatis!)
-            # Turunkan ALL corner servos SIMULTANEOUSLY (UP → DOWN)
-            print(f"[7ServoHW]    ↓ Lowering ALL 4 corners simultaneously (UP→DOWN)...")
+            # Step 3: Turunkan ALL corner servos (wadah turun 90°)
+            print(f"[7ServoHW]    ↓ Step 3: Lower all 4 corners (UP→DOWN, 90° rotation)...")
             corner_moves = []
             for corner in ['corner_a', 'corner_b', 'corner_c', 'corner_d']:
                 if corner in self.servos:
                     corner_moves.append((corner, self.servos[corner]['down']))
             
-            # Execute lowering in parallel for synchronized motion
             if corner_moves:
                 self._move_multiple_servos_parallel(corner_moves)
             
-            print(f"[7ServoHW]    ✓ Waste container lowered!")
+            # Step 4: TUNGGU corner servos selesai turun (CRITICAL!)
+            # Servo butuh waktu untuk rotasi 90° penuh
+            corner_drop_time = getattr(config, 'SERVO_MOVEMENT_TIME', 0.15)
+            print(f"[7ServoHW]    ⏱ Step 4: Wait {corner_drop_time}s for corners to complete drop...")
+            time.sleep(corner_drop_time)
+            
+            print(f"[7ServoHW]    ✓ Container lowered 90°, locks unlocked!")
             
             # ═══════════════════════════════════════════════════════════
-            # FASE 3: WAITING FOR WASTE TO FALL
+            # FASE 3: WAITING FOR WASTE TO FALL & SLIDE
             # ═══════════════════════════════════════════════════════════
-            print(f"\n[7ServoHW] ⏳ FASE 3: Waiting for waste to fall...")
+            print(f"\n[7ServoHW] ⏳ FASE 3: Waiting for waste to fall and slide...")
+            
+            # Step 1: Sampah jatuh dari Layer 1 ke selector
             fall_time = getattr(config, 'SERVO_FALL_TIME', 0.5)
-            print(f"[7ServoHW]    ⏱ Fall time: {fall_time}s")
+            print(f"[7ServoHW]    ↓ Step 1: Waste falling from Layer 1 ({fall_time}s)...")
             time.sleep(fall_time)
             
-            # Additional slide time on selector
+            # Step 2: Sampah meluncur di selector menuju bin
             slide_time = getattr(config, 'SERVO_SLIDE_TIME', 0.5)
-            print(f"[7ServoHW]    ⏱ Slide time: {slide_time}s")
+            print(f"[7ServoHW]    → Step 2: Waste sliding on selector to bin ({slide_time}s)...")
             time.sleep(slide_time)
             
+            # Step 3: RESET SELECTOR setelah sampah selesai meluncur (PINDAH KE SINI!)
+            print(f"[7ServoHW]    🔄 Step 3: Waste delivered! Resetting selector to NEUTRAL...")
+            neutral_angle = self.servos['selector']['neutral']
+            self._move_servo('selector', neutral_angle)
+            
+            # Delay setelah selector reset (stabilisasi)
+            reset_delay = getattr(config, 'SERVO_RESET_DELAY', 0.3)
+            print(f"[7ServoHW]    ⏱ Step 4: Wait {reset_delay}s after selector reset...")
+            time.sleep(reset_delay)
+            
+            print(f"[7ServoHW]    ✓ Waste sorted successfully, selector reset to neutral!")
+            
             # ═══════════════════════════════════════════════════════════
-            # FASE 4: LIFT & LOCK
+            # FASE 4: LIFT WADAH & LOCK KEMBALI
             # ═══════════════════════════════════════════════════════════
             print(f"\n[7ServoHW] ⬆️ FASE 4: Lifting container and locking...")
             
-            # Lift ALL corner servos SIMULTANEOUSLY (DOWN → UP)
-            print(f"[7ServoHW]    ↑ Lifting ALL 4 corners simultaneously (REALTIME)...")
+            # Step 1: Naikkan ALL corner servos (wadah naik)
+            print(f"[7ServoHW]    ↑ Step 1: Lift all 4 corners (DOWN→UP)...")
             corner_moves = []
             for corner in ['corner_a', 'corner_b', 'corner_c', 'corner_d']:
                 if corner in self.servos:
                     corner_moves.append((corner, self.servos[corner]['up']))
             
-            # Execute lift in parallel for synchronized motion
             if corner_moves:
                 self._move_multiple_servos_parallel(corner_moves)
             
-            # Wait for lift to complete
+            # Step 2: TUNGGU/JEDA untuk wadah sampai ke atas (PENTING!)
             lift_time = getattr(config, 'SERVO_LIFT_TIME', 0.3)
-            print(f"[7ServoHW]    ⏱ Lift time: {lift_time}s")
+            print(f"[7ServoHW]    ⏱ Step 2: Wait {lift_time}s for container to reach top...")
             time.sleep(lift_time)
             
-            # Lock BOTH lock servos SIMULTANEOUSLY (menahan wadah di posisi atas)
-            print(f"[7ServoHW]    🔒 Locking BOTH locks simultaneously (REALTIME)...")
+            # Step 3: LOCK lock servos kembali (kunci wadah di atas)
+            print(f"[7ServoHW]    🔒 Step 3: LOCK both locks (secure container)...")
             lock_moves = []
             if 'lock_left' in self.servos:
                 lock_moves.append(('lock_left', self.servos['lock_left']['locked']))
             if 'lock_right' in self.servos:
                 lock_moves.append(('lock_right', self.servos['lock_right']['locked']))
             
-            # Execute lock in parallel for synchronized motion
             if lock_moves:
                 self._move_multiple_servos_parallel(lock_moves)
             
-            # Delay after lock
-            print(f"[7ServoHW]    ⏱ Lock delay {lock_delay}s...")
+            # Step 4: TUNGGU/JEDA setelah lock (PENTING!)
+            lock_delay = getattr(config, 'SERVO_LOCK_DELAY', 0.1)
+            print(f"[7ServoHW]    ⏱ Step 4: Wait {lock_delay}s after locking...")
             time.sleep(lock_delay)
             
-            # ═══════════════════════════════════════════════════════════
-            # FASE 5: RESET SELECTOR
-            # ═══════════════════════════════════════════════════════════
-            print(f"\n[7ServoHW] 🔄 FASE 5: Resetting selector to NEUTRAL...")
-            neutral_angle = self.servos['selector']['neutral']
-            self._move_servo('selector', neutral_angle)
+            print(f"[7ServoHW]    ✓ Container lifted and locked securely!")
             
-            # Delay after reset
-            reset_delay = getattr(config, 'SERVO_RESET_DELAY', 0.3)
-            print(f"[7ServoHW]    ⏱ Reset delay {reset_delay}s...")
-            time.sleep(reset_delay)
-            
+            # ═══════════════════════════════════════════════════════════
+            # SORTING COMPLETE!
+            # ═══════════════════════════════════════════════════════════
             print(f"\n[7ServoHW] ✅ SORTING COMPLETE! Waste sorted to {target_bin.upper()}")
             print("[7ServoHW]    → Container: UP & LOCKED")
-            print("[7ServoHW]    → Selector: NEUTRAL")
+            print("[7ServoHW]    → Selector: NEUTRAL (already reset)")
             print("[7ServoHW]    → System ready for next sorting\n")
             
             return True

@@ -205,16 +205,50 @@ SERVOKIT_ACTUATION_RANGE = 180    # derajat total
 # Layer 1 - Corner Servos (4 servo)
 # ──────────────────────────────────────────
 # Fungsi: Mengangkat dan menurunkan wadah di setiap sudut
+# 
+# ARAH PUTARAN (berdasarkan instalasi fisik):
+#   • Servo D: Searah jarum jam (CW - Clockwise)
+#   • Servo C: Berlawanan arah jarum jam (CCW - Counter-Clockwise)
+#   • Servo A & B: Mengikuti pola yang sama dengan C atau D
+# 
+# Karena arah berbeda, angle UP/DOWN juga berbeda per servo:
+#   • CW servos:  UP=0°, DOWN=90° (turun dengan rotasi positif)
+#   • CCW servos: UP=90°, DOWN=0° (turun dengan rotasi negatif, nilai dibalik)
 
 # Mapping sesuai instruksi: 4,6,8,9 → A,B,C,D
 SERVO_L1_CORNER_A_CHANNEL = 4    # Channel PCA9685 - Sudut A (Kiri Atas)
 SERVO_L1_CORNER_B_CHANNEL = 6    # Channel PCA9685 - Sudut B (Kiri Bawah)
 SERVO_L1_CORNER_C_CHANNEL = 8    # Channel PCA9685 - Sudut C (Kanan Atas)
-SERVO_L1_CORNER_D_CHANNEL = 9    # Channel PCA9695 - Sudut D (Kanan Bawah)
+SERVO_L1_CORNER_D_CHANNEL = 9    # Channel PCA9685 - Sudut D (Kanan Bawah)
 
+# Global default (untuk servo dengan rotasi CW seperti D)
 # ⚠️ CRITICAL SAFETY: Angles MUST be 0-180° only (prevent 360° rotation)
 SERVO_L1_CORNER_UP = 0           # Posisi UP (wadah terangkat, siap terima sampah)
-SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun setelah jatuh gravitasi)
+SERVO_L1_CORNER_DOWN = 90        # Posisi DOWN (wadah turun 90° dari UP)
+
+# Per-servo angles (untuk servo yang arahnya berbeda)
+# Set None untuk menggunakan default di atas, atau override dengan nilai spesifik
+# 
+# PETUNJUK SETUP:
+# - Jika servo berputar ke arah yang SALAH saat turun/naik:
+#   → Balik nilai UP/DOWN untuk servo tersebut (90 ↔ 0)
+# 
+# KONFIGURASI BERDASARKAN POSISI FISIK:
+#   Servo A (Kiri Bawah)  → Searah jarum jam (CW):  UP=0°, DOWN=90°
+#   Servo B (Kiri Atas)   → Berlawanan arah (CCW):  UP=90°, DOWN=0°
+#   Servo C (Kanan Atas)  → Berlawanan arah (CCW):  UP=90°, DOWN=0°
+#   Servo D (Kanan Bawah) → Searah jarum jam (CW):  UP=0°, DOWN=90°
+SERVO_L1_CORNER_A_UP = None      # CW: gunakan default (UP=0°, DOWN=90°)
+SERVO_L1_CORNER_A_DOWN = None
+
+SERVO_L1_CORNER_B_UP = 90        # CCW: balik arah (UP=90°, DOWN=0°)
+SERVO_L1_CORNER_B_DOWN = 0
+
+SERVO_L1_CORNER_C_UP = 90        # CCW: balik arah (UP=90°, DOWN=0°)
+SERVO_L1_CORNER_C_DOWN = 0
+
+SERVO_L1_CORNER_D_UP = None      # CW: gunakan default (UP=0°, DOWN=90°)
+SERVO_L1_CORNER_D_DOWN = None
 
 # ──────────────────────────────────────────
 # Layer 1 - Lock Servos (2 servo)
