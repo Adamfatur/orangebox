@@ -120,7 +120,6 @@ class HardwareInterface:
     """
     Mock implementation dari hardware interface untuk testing di macOS.
     Interface ini mensimulasikan:
-    - Proximity sensor (trigger dengan keyboard 't')
     - Webcam capture
     - Servo movement (print ke console)
     """
@@ -286,28 +285,14 @@ class HardwareInterface:
     
     def check_trigger(self) -> bool:
         """
-        Simulasi proximity sensor.
-        Mendeteksi trigger dengan menekan tombol 't' pada keyboard.
+        Check for trigger event.
+        
+        Note: Trigger logic is handled by MainController's motion detection.
+        This method is deprecated and always returns False.
         
         Returns:
-            True jika trigger terdeteksi (tombol 't' ditekan), False jika tidak
+            False (trigger via motion detection)
         """
-        # Implementasi cooldown agar tidak trigger berulang kali
-        current_time = time.time()
-        if current_time - self.last_trigger_time < self.trigger_cooldown:
-            return False
-        
-        # Check keyboard input
-        key = cv2.waitKey(1) & 0xFF
-        
-        if key == ord('t'):
-            self.last_trigger_time = current_time
-            print("[HardwareInterface] ⚡ TRIGGER DETECTED (tombol 't' ditekan)")
-            return True
-        elif key == ord('q'):
-            print("[HardwareInterface] Tombol 'q' ditekan - akan keluar...")
-            return False
-        
         return False
     
     def get_camera_frame(self) -> Optional[np.ndarray]:
@@ -692,7 +677,7 @@ def main():
     """
     print("Testing HardwareInterface (Mock for macOS)...\n")
     print("Instruksi:")
-    print("- Tekan 't' untuk trigger (simulasi sensor proximity)")
+    print("- Trigger detection via motion (MainController)")
     print("- Tekan 'q' untuk quit")
     print("-" * 50)
     

@@ -164,16 +164,6 @@ FOCAL_LENGTH_PX = 900.0
 KNOWN_OBJECT_HEIGHT_CM = 10.0
 
 # ============================================
-# HARDWARE SETTINGS (Raspberry Pi)
-# ============================================
-
-# Proximity Sensor Configuration
-# Set USE_PROXIMITY_SENSOR = False jika tidak menggunakan proximity sensor
-# atau jika terjadi error "Cannot determine SOC peripheral base address" di RPi 5
-USE_PROXIMITY_SENSOR = False  # Default: False (disable untuk RPi 5 compatibility)
-PROXIMITY_SENSOR_PIN = 17      # GPIO Pin untuk proximity sensor (jika enabled)
-
-# ============================================
 # SERVO CONFIGURATION - 7-SERVO SYSTEM
 # ============================================
 # Total: 7 servo (6 Layer 1 + 1 Layer 2)

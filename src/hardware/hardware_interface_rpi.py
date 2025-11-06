@@ -59,7 +59,7 @@ except ImportError:
 class HardwareInterface:
     """
     Hardware interface implementation untuk Raspberry Pi.
-    Mengontrol sensor proximity, Pi Camera, dan servo motor.
+    Mengontrol Pi Camera dan servo motor.
     """
     
     def __init__(self, camera_index: Optional[int] = None):
@@ -331,12 +331,11 @@ class HardwareInterface:
         """
         Check for trigger event.
         
-        Note: Hardware interface does NOT handle triggers in v1.2.
-        Trigger logic is handled by MainController (button press or timed intervals).
-        This method always returns False for compatibility.
+        Note: Trigger logic is handled by MainController's motion detection.
+        This method is deprecated and always returns False.
         
         Returns:
-            False (no proximity sensor in v1.2)
+            False (trigger via motion detection)
         """
         return False
     
@@ -684,7 +683,6 @@ def configure_hardware():
     Edit nilai-nilai di sini sesuai dengan setup hardware Anda.
     """
     config = {
-        'proximity_sensor_pin': 17,     # GPIO pin untuk proximity sensor
         'servo_channel': 0,              # Channel servo di PCA9685 (0-15)
         'servo_angle_bin_a': 0,          # Sudut servo untuk Bin A (Organic)
         'servo_angle_bin_b': 90,         # Sudut servo untuk Bin B (Anorganic)
@@ -693,7 +691,6 @@ def configure_hardware():
     }
     
     print("Hardware Configuration:")
-    print(f"  Proximity Sensor: GPIO{config['proximity_sensor_pin']}")
     print(f"  Servo Channel: {config['servo_channel']}")
     print(f"  Servo Angles: Bin A={config['servo_angle_bin_a']}°, "
           f"Bin B={config['servo_angle_bin_b']}°, Neutral={config['servo_angle_neutral']}°")
@@ -738,15 +735,6 @@ def main():
         frame = hw.get_camera_frame()
         if frame is not None:
             print(f"✓ Camera working! Frame shape: {frame.shape}")
-        
-        print("\nTesting proximity sensor...")
-        print("Trigger the proximity sensor to test...")
-        
-        for i in range(50):
-            if hw.check_trigger():
-                print("✓ Proximity sensor triggered!")
-                break
-            time.sleep(0.1)
         
         print("\n✓ All tests completed!")
         

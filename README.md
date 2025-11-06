@@ -19,11 +19,13 @@ git clone https://github.com/Adamfatur/orangebox.git
 cd orangebox
 git checkout v1.3
 
-# 2. Install otomatis (setup venv + dependencies)
+# 2. Install otomatis (setup venv + dependencies + auto-start)
 ./install.sh
 
-# 3. Jalankan aplikasi
-python3 main.py
+# Selesai! 🎉
+# Orange Box akan tanya: "Install auto-start service? (Y/n)"
+#   Pilih Y → Sistem berjalan otomatis saat boot/reboot
+#   Pilih N → Jalankan manual dengan: ./start.sh
 ```
 
 **Itu saja!** Script otomatis menangani:
@@ -33,6 +35,107 @@ python3 main.py
 - ✅ Deteksi kamera otomatis
 - ✅ Konfigurasi GPIO/I2C/SPI
 - ✅ Setup bin monitoring dengan sensor ultrasonic
+- ✅ **BARU:** Setup auto-start service (systemd) - **Pilihan saat instalasi**
+
+### 🔄 Auto-Start Explained
+
+**Jika pilih "Yes" saat install:**
+1. ✅ Orange Box akan **berjalan otomatis** saat Raspberry Pi boot
+2. ✅ Restart otomatis jika crash
+3. ✅ Berjalan di background sebagai systemd service
+4. ✅ **Tidak perlu** buka terminal atau jalankan manual lagi!
+
+**Cara kerja:**
+- Saat Raspberry Pi menyala → Systemd start service → Orange Box jalan otomatis
+- Saat reboot → Orange Box otomatis jalan lagi
+- Jika crash → Otomatis restart sendiri (max 10x)
+
+**Control service:**
+```bash
+sudo systemctl status orangebox   # Cek status
+sudo journalctl -u orangebox -f   # Lihat logs live
+sudo systemctl stop orangebox     # Stop service
+sudo systemctl start orangebox    # Start service
+sudo systemctl restart orangebox  # Restart service
+```
+
+**Jika pilih "No" (manual mode):**
+```bash
+./start.sh              # Jalankan manual
+# atau
+python3 main.py         # Langsung
+```
+
+**Install auto-start nanti:**
+```bash
+./deployment/install_service.sh   # Setup auto-start kapan saja
+```
+
+**Remove auto-start:**
+```bash
+./deployment/uninstall_service.sh # Hapus auto-start
+```
+
+---
+
+## 📁 Struktur Project
+
+```
+orangebox-1.3/
+├── config.py                    # ⚙️  Konfigurasi utama sistem
+├── main.py                      # 🚀 Entry point aplikasi
+├── requirements.txt             # 📦 Python dependencies
+├── install.sh                   # 🛠️  Auto-installer
+├── start.sh                     # ▶️  Quick start script
+│
+├── src/                         # 📂 Source code utama
+│   ├── core/                    # 🧠 Core logic
+│   │   ├── main_controller.py  #    - FSM controller
+│   │   ├── waste_classifier.py #    - AI classifier
+│   │   ├── bin_monitor.py      #    - Bin capacity monitoring
+│   │   ├── database_service.py #    - MySQL integration
+│   │   └── location_service.py #    - GPS integration
+│   └── hardware/                # 🔌 Hardware interfaces
+│       ├── seven_servo_hardware.py  # - 7-servo controller
+│       ├── hardware_interface_rpi.py # - RPi GPIO/I2C
+│       └── hardware_interface_mock.py # - Mock untuk Mac
+│
+├── models/                      # 🤖 AI Models
+│   ├── model_quant_infer.tflite #    - Quantized model (production)
+│   ├── model_float32_infer.tflite #  - Float32 model (backup)
+│   └── labels.txt               #    - Class labels
+│
+├── deployment/                  # 🚀 Deployment scripts
+│   ├── install_service.sh       #    - Setup auto-start service
+│   ├── uninstall_service.sh     #    - Remove auto-start
+│   ├── service.sh               #    - Service control helper
+│   ├── orangebox.service.template # - Systemd template
+│   └── README.md                #    - Deployment guide
+│
+├── docs/                        # 📚 Documentation
+│   ├── BIN_MONITORING_GUIDE.md  #    - Sensor ultrasonic setup
+│   ├── GPS_NEO6M_SETUP.md       #    - GPS module setup
+│   └── SERVO_GUIDE.md           #    - Servo installation guide
+│
+├── database/                    # 💾 Database schemas
+│   └── schema_bin_capacity.sql  #    - Bin capacity table
+│
+├── scripts/                     # 🧪 Utility scripts
+│   ├── test_bin_monitor.py      #    - Test sensor ultrasonic
+│   ├── test_seven_servo.py      #    - Test servo system
+│   └── ...                      #    - Other diagnostic tools
+│
+└── data/                        # 📊 Data storage
+    ├── device_config.txt        #    - Device configuration
+    └── location_history.jsonl   #    - GPS history logs
+```
+
+**Key Files:**
+- `config.py` - **Edit ini** untuk konfigurasi servo, sensor, database, GPS
+- `main.py` - Jalankan ini untuk start aplikasi
+- `deployment/install_service.sh` - **Jalankan ini** untuk auto-start setup
+
+---
 
 ## 📋 Persyaratan Hardware
 

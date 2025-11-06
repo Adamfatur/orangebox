@@ -1,45 +1,52 @@
 # Orange Box Systemd Service Template
-# File ini akan dibuat otomatis oleh deploy.sh
-# Location: /etc/systemd/system/orangebox.service
+# File ini digunakan oleh install_service.sh untuk generate service file
+# Variables akan di-replace otomatis:
+#   PROJECT_DIR → path ke project orangebox
+#   User/Group pi → current user yang menjalankan installer
+# Location setelah install: /etc/systemd/system/orangebox.service
 
 [Unit]
-Description=Orange Box - Intelligent Waste Classification System
-Documentation=https://github.com/yourrepo/orangebox
-After=network.target
+Description=Orange Box v1.3 - AI Waste Sorting System
+Documentation=https://github.com/Adamfatur/orangebox
+# Tunggu network stabil (hindari After=multi-user.target untuk mencegah ordering loop)
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/home/pi/orangebox
+WorkingDirectory=PROJECT_DIR
 
 # Environment variables
 Environment="DISPLAY=:0"
 Environment="PYTHONUNBUFFERED=1"
-Environment="PYTHONPATH=/home/pi/orangebox"
+Environment="PYTHONPATH=PROJECT_DIR"
+Environment="HOME=/home/pi"
+
+# Delay start untuk memastikan I2C dan GPIO siap (penting untuk RPi 5)
+ExecStartPre=/bin/sleep 5
 
 # Main command (gunakan interpreter dari virtual environment untuk stabilitas)
-ExecStart=/home/pi/orangebox/.venv/bin/python3 /home/pi/orangebox/main.py --model /home/pi/orangebox/models/model_quant_infer.tflite
+ExecStart=PROJECT_DIR/.venv/bin/python3 PROJECT_DIR/main.py
 
-# Restart policy
+# Restart policy - lebih agresif untuk production
 Restart=always
 RestartSec=10
-StartLimitInterval=5min
-StartLimitBurst=5
-
-# Resource limits (optional)
-# MemoryLimit=512M
-# CPUQuota=70%
+StartLimitIntervalSec=5min
+StartLimitBurst=10
 
 # Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=orangebox
 
-# Security (optional hardening)
+# Security hardening (optional, uncomment jika diperlukan)
 # NoNewPrivileges=true
 # PrivateTmp=true
+
+# Ensure GPIO/I2C permissions
+SupplementaryGroups=gpio i2c spi video dialout
 
 [Install]
 WantedBy=multi-user.target

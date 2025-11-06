@@ -420,6 +420,81 @@ if [[ "$PLATFORM" == "rpi" ]]; then
     echo "  GPS: Enabled"
     echo "  Servos: Auto-detect enabled"
     echo "  Database: Enabled"
+    echo ""
+    
+    # ============================================================
+    # AUTO-START SERVICE SETUP (Raspberry Pi only)
+    # ============================================================
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🚀 AUTO-START SERVICE SETUP"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Apakah Anda ingin Orange Box berjalan OTOMATIS saat Raspberry Pi boot?"
+    echo "  ✅ YES: Orange Box akan start otomatis setiap kali RPi menyala/reboot"
+    echo "  ❌ NO:  Anda harus jalankan manual dengan: ./start.sh atau python3 main.py"
+    echo ""
+    
+    while true; do
+        read -p "Install auto-start service? (Y/n): " auto_start
+        auto_start=${auto_start:-Y}  # Default: Yes
+        
+        case $auto_start in
+            [Yy]* )
+                echo ""
+                echo "📦 Installing auto-start service..."
+                
+                # Check if deployment script exists
+                if [ -f "deployment/install_service.sh" ]; then
+                    # Make it executable
+                    chmod +x deployment/install_service.sh
+                    
+                    # Run installer
+                    if ./deployment/install_service.sh; then
+                        echo ""
+                        echo "✅ AUTO-START SERVICE INSTALLED!"
+                        echo ""
+                        echo "📋 Orange Box akan:"
+                        echo "   • Start otomatis saat Raspberry Pi boot"
+                        echo "   • Restart otomatis jika crash"
+                        echo "   • Berjalan di background sebagai service"
+                        echo ""
+                        echo "🔧 Perintah berguna:"
+                        echo "   • Lihat status:  sudo systemctl status orangebox"
+                        echo "   • Lihat logs:    sudo journalctl -u orangebox -f"
+                        echo "   • Stop service:  sudo systemctl stop orangebox"
+                        echo "   • Start service: sudo systemctl start orangebox"
+                        echo ""
+                        echo "💡 TIP: Untuk test auto-start, reboot sekarang:"
+                        echo "   $ sudo reboot"
+                    else
+                        echo ""
+                        echo "⚠️  Auto-start installation failed!"
+                        echo "   You can install manually later with:"
+                        echo "   $ ./deployment/install_service.sh"
+                    fi
+                else
+                    echo "⚠️  Auto-start installer not found!"
+                    echo "   File deployment/install_service.sh missing"
+                fi
+                break
+                ;;
+            [Nn]* )
+                echo ""
+                echo "⏭️  Skipping auto-start setup."
+                echo ""
+                echo "💡 You can install auto-start later dengan:"
+                echo "   $ ./deployment/install_service.sh"
+                break
+                ;;
+            * )
+                echo "Please answer Y (yes) or N (no)."
+                ;;
+        esac
+    done
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
 else
     echo "  GPS: Disabled (development mode)"
     echo "  Servos: Disabled (development mode)"
