@@ -47,14 +47,15 @@ HC-SR04      →  Raspberry Pi 5
 ─────────────────────────────────
 VCC          →  5V (Pin 2 or 4)
 GND          →  GND (Pin 6, 9, 14, 20, 25, 30, 34, 39)
-TRIG         →  GPIO 5 (Pin 29)
-ECHO         →  GPIO 6 (Pin 31)
+TRIG         →  GPIO 27 (Pin 13)
+ECHO         →  GPIO 22 (Pin 15)
 ```
 
 **⚠️ IMPORTANT:** 
 - DO NOT connect ECHO directly to GPIO! Use voltage divider (5V → 3.3V)
 - Or use HC-SR04 module with built-in level shifter
 - Raspberry Pi GPIO is 3.3V tolerant!
+- GPIO 27/22 chosen to avoid I2C (GPIO 2/3) and UART (GPIO 14/15) conflicts
 
 ### Voltage Divider Circuit (if needed)
 
@@ -117,8 +118,8 @@ ENABLE_BIN_MONITORING = True  # Set False to disable
 # Sensor GPIO pins
 BIN_A_SENSOR_TRIG = 23  # BIN A (Organic)
 BIN_A_SENSOR_ECHO = 24
-BIN_B_SENSOR_TRIG = 5   # BIN B (Anorganic)
-BIN_B_SENSOR_ECHO = 6
+BIN_B_SENSOR_TRIG = 27  # BIN B (Anorganic) - Aman, tidak bentrok dengan I2C/UART
+BIN_B_SENSOR_ECHO = 22  # GPIO 27/22 menghindari konflik dengan servo & GPS
 
 # Calibration (measure your bin dimensions!)
 BIN_EMPTY_DISTANCE_CM = 80.0      # Distance when empty (0%)

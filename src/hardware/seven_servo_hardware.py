@@ -71,26 +71,26 @@
 ⚙️  KONFIGURASI (config.py):
 
    # Layer 1 - Corner Servos (4 servo)
-   SERVO_L1_CORNER_A_CHANNEL = 0    # Kiri atas
-   SERVO_L1_CORNER_B_CHANNEL = 1    # Kiri bawah
-   SERVO_L1_CORNER_C_CHANNEL = 2    # Kanan atas
-   SERVO_L1_CORNER_D_CHANNEL = 3    # Kanan bawah
+   SERVO_L1_CORNER_A_CHANNEL = 0    # Default: 4 (Kiri atas)
+   SERVO_L1_CORNER_B_CHANNEL = 2    # Default: 6 (Kiri bawah)
+   SERVO_L1_CORNER_C_CHANNEL = 4    # Default: 8 (Kanan atas)
+   SERVO_L1_CORNER_D_CHANNEL = 6    # Default: 9 (Kanan bawah)
    
-   SERVO_L1_CORNER_UP = 0           # Posisi atas (wadah terangkat)
-   SERVO_L1_CORNER_DOWN = 90        # Posisi bawah (wadah jatuh)
+   SERVO_L1_CORNER_UP = 90          # Posisi atas (wadah terangkat)
+   SERVO_L1_CORNER_DOWN = 180       # Posisi bawah (wadah jatuh)
    
    # Layer 1 - Lock Servos (2 servo)
-   SERVO_L1_LOCK_LEFT_CHANNEL = 4   # Pengunci kiri
-   SERVO_L1_LOCK_RIGHT_CHANNEL = 5  # Pengunci kanan
+   SERVO_L1_LOCK_LEFT_CHANNEL = 0   # Default: 0 (Pengunci kiri)
+   SERVO_L1_LOCK_RIGHT_CHANNEL = 2  # Default: 2 (Pengunci kanan)
    
    SERVO_L1_LOCK_LOCKED = 90        # Terkunci (horizontal, menahan)
-   SERVO_L1_LOCK_UNLOCKED = 0       # Terbuka (vertikal, lepas)
+   SERVO_L1_LOCK_UNLOCKED = 10      # Terbuka (vertikal, lepas)
    
    # Layer 2 - Selector Servo (1 servo)
-   SERVO_L2_SELECTOR_CHANNEL = 6    # Pemilah
+   SERVO_L2_SELECTOR_CHANNEL = 14   # Default: 12 (Pemilah)
    SERVO_L2_SELECTOR_NEUTRAL = 90   # Tengah
-   SERVO_L2_SELECTOR_BIN_A = 60     # Ke Bin A (30° dari neutral)
-   SERVO_L2_SELECTOR_BIN_B = 120    # Ke Bin B (30° dari neutral)
+   SERVO_L2_SELECTOR_BIN_A = 45     # Ke Bin A (45° dari neutral)
+   SERVO_L2_SELECTOR_BIN_B = 135    # Ke Bin B (135° dari neutral)
 
 📚 TIMING SETTINGS:
    SERVO_MOVEMENT_TIME = 0.15       # Waktu gerakan servo
@@ -221,28 +221,55 @@ class SevenServoHardware:
             'corner_d': _normalize_channel(getattr(config, 'SERVO_L1_CORNER_D_CHANNEL', 9)),  # Kanan bawah
         }
         
-        corner_up = getattr(config, 'SERVO_L1_CORNER_UP', 0)
-        corner_down = getattr(config, 'SERVO_L1_CORNER_DOWN', 90)
+        # Global defaults (fallback jika per-servo angles tidak di-set)
+        corner_up_default = getattr(config, 'SERVO_L1_CORNER_UP', 0)
+        corner_down_default = getattr(config, 'SERVO_L1_CORNER_DOWN', 90)
         max_corner_swing = getattr(config, 'SERVO_MAX_SWING_CORNER_DEG', 90)
-        # Enforce max swing for corners (exactly 90° by default)
-        delta_corner = corner_down - corner_up
-        if abs(delta_corner) != max_corner_swing:
-            sign = 1 if delta_corner >= 0 else -1
-            adjusted = corner_up + sign * max_corner_swing
-            print(f"[7ServoHW] • Adjust corners swing: {corner_up}→{corner_down} (Δ{delta_corner}°) → {corner_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
-            corner_down = adjusted
+        
+        # Per-servo angle configuration (untuk servo dengan arah berbeda)
+        per_servo_angles = {
+            'corner_a': {
+                'up': getattr(config, 'SERVO_L1_CORNER_A_UP', corner_up_default),
+                'down': getattr(config, 'SERVO_L1_CORNER_A_DOWN', corner_down_default)
+            },
+            'corner_b': {
+                'up': getattr(config, 'SERVO_L1_CORNER_B_UP', corner_up_default),
+                'down': getattr(config, 'SERVO_L1_CORNER_B_DOWN', corner_down_default)
+            },
+            'corner_c': {
+                'up': getattr(config, 'SERVO_L1_CORNER_C_UP', corner_up_default),
+                'down': getattr(config, 'SERVO_L1_CORNER_C_DOWN', corner_down_default)
+            },
+            'corner_d': {
+                'up': getattr(config, 'SERVO_L1_CORNER_D_UP', corner_up_default),
+                'down': getattr(config, 'SERVO_L1_CORNER_D_DOWN', corner_down_default)
+            },
+        }
         
         for name, channel in corner_channels.items():
             if channel is not None:
+                # Get per-servo angles (bisa berbeda untuk CW vs CCW servos)
+                servo_up = per_servo_angles[name]['up']
+                servo_down = per_servo_angles[name]['down']
+                
+                # Enforce max swing for this specific servo
+                delta_corner = servo_down - servo_up
+                if abs(delta_corner) != max_corner_swing:
+                    sign = 1 if delta_corner >= 0 else -1
+                    adjusted = servo_up + sign * max_corner_swing
+                    print(f"[7ServoHW] • Adjust {name} swing: {servo_up}→{servo_down} (Δ{delta_corner}°) → {servo_up}→{adjusted} (Δ{sign*max_corner_swing}°)")
+                    servo_down = adjusted
+                
                 self.servos[name] = {
                     'name': f'Layer 1 {name.upper()}',
                     'channel': channel,
-                    'up': corner_up,
-                    'down': corner_down,
+                    'up': servo_up,
+                    'down': servo_down,
                     'current_angle': None,
                     'last_move_time': 0
                 }
-                print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (UP={corner_up}°, DOWN={corner_down}°)")
+                print(f"[7ServoHW] • {self.servos[name]['name']}: CH {channel} (UP={servo_up}°, DOWN={servo_down}°)")
+
         
         # Layer 1 - Lock Servos (2 servo pengunci)
         lock_channels = {

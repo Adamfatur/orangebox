@@ -216,42 +216,53 @@ SERVOKIT_ACTUATION_RANGE = 180    # derajat total
 #   • CW servos:  UP=0°, DOWN=90° (turun dengan rotasi positif)
 #   • CCW servos: UP=90°, DOWN=0° (turun dengan rotasi negatif, nilai dibalik)
 
+# ⚠️ PENTING: Ini adalah CHANNEL di PCA9685 board (I2C), BUKAN GPIO pin!
+# PCA9685 berkomunikasi via I2C (GPIO 2/3), servo tidak pakai GPIO langsung
+# Channel 0-15 pada PCA9685 board, tidak bentrok dengan GPIO ultrasonik/GPS
+# 
 # Mapping sesuai instruksi: 4,6,8,9 → A,B,C,D
 SERVO_L1_CORNER_A_CHANNEL = 0    # Channel PCA9685 - Sudut A (Kiri Atas)
 SERVO_L1_CORNER_B_CHANNEL = 2    # Channel PCA9685 - Sudut B (Kiri Bawah)
 SERVO_L1_CORNER_C_CHANNEL = 4    # Channel PCA9685 - Sudut C (Kanan Atas)
 SERVO_L1_CORNER_D_CHANNEL = 6    # Channel PCA9685 - Sudut D (Kanan Bawah)
 
-# Global default (untuk servo dengan rotasi CW seperti D)
-# ⚠️ CRITICAL SAFETY FIX (Gemini Pro 2.5): JANGAN gunakan 0° atau 180°!
-# Servo punya batas mekanis di ~5° dan ~175°. Nilai 0°/180° menyebabkan "servo hunting" → 360° rotation.
-# Gunakan 10° dan 100° (90° swing) untuk menghindari batas mekanis.
-SERVO_L1_CORNER_UP = 90           # Posisi UP (wadah terangkat) - AMAN, jauh dari 0°
-SERVO_L1_CORNER_DOWN = 180        # Posisi DOWN (90° swing dari UP) - AMAN, jauh dari 180°
-
-# Per-servo angles (untuk servo yang arahnya berbeda)
-# Set None untuk menggunakan default di atas, atau override dengan nilai spesifik
+# ═══════════════════════════════════════════════════════════════
+# GLOBAL DEFAULT ANGLES (Fallback jika per-servo tidak di-set)
+# ═══════════════════════════════════════════════════════════════
+# ⚠️ CRITICAL SAFETY: Hindari 0° dan 180° untuk mencegah servo hunting!
+# Gunakan range aman: 10°-170° (margin 10° dari batas mekanis)
 # 
-# PETUNJUK SETUP:
-# - Jika servo berputar ke arah yang SALAH saat turun/naik:
-#   → Balik nilai UP/DOWN untuk servo tersebut (90 ↔ 0)
+# Nilai ini HANYA digunakan jika SERVO_L1_CORNER_X_UP/DOWN tidak di-set
+SERVO_L1_CORNER_UP = 90           # DEFAULT: Posisi UP (wadah terangkat)
+SERVO_L1_CORNER_DOWN = 180        # DEFAULT: Posisi DOWN (wadah jatuh, 90° swing)
+
+# ═══════════════════════════════════════════════════════════════
+# PER-SERVO ANGLES (INI YANG DIGUNAKAN SISTEM!)
+# ═══════════════════════════════════════════════════════════════
+# Setiap servo HARUS dikonfigurasi sesuai arah putaran fisiknya:
+# - CW servos (Clockwise): UP=90°, DOWN=180°
+# - CCW servos (Counter-Clockwise): UP=90°, DOWN=0° (atau disesuaikan)
 # 
-# KONFIGURASI BERDASARKAN POSISI FISIK:
-#   Servo A (Kiri Bawah)  → Searah jarum jam (CW):  UP=10°, DOWN=100°
-#   Servo B (Kiri Atas)   → Berlawanan arah (CCW):  UP=100°, DOWN=10°
-#   Servo C (Kanan Atas)  → Berlawanan arah (CCW):  UP=100°, DOWN=10°
-#   Servo D (Kanan Bawah) → Searah jarum jam (CW):  UP=10°, DOWN=100°
-SERVO_L1_CORNER_A_UP = 90      # CW: gunakan default (UP=10°, DOWN=100°)
-SERVO_L1_CORNER_A_DOWN = 180
+# CARA KALIBRASI:
+# 1. Jalankan: python3 scripts/test_seven_servo.py
+# 2. Amati arah putaran setiap servo:
+#    - Jika UP malah TURUN → Tukar nilai UP dan DOWN
+#    - Jika DOWN malah NAIK → Tukar nilai UP dan DOWN
+# 3. Update nilai di bawah sesuai hasil pengamatan
+# 
+# KONFIGURASI SAAT INI (semua CW - sesuaikan jika berbeda!):
 
-SERVO_L1_CORNER_B_UP = 90       # CCW: balik arah (UP=100°, DOWN=10°)
-SERVO_L1_CORNER_B_DOWN = 180
+SERVO_L1_CORNER_A_UP = 90      # Corner A: UP = 90° (wadah di atas)
+SERVO_L1_CORNER_A_DOWN = 180   # Corner A: DOWN = 180° (wadah jatuh)
 
-SERVO_L1_CORNER_C_UP = 90       # CCW: balik arah (UP=100°, DOWN=10°)
-SERVO_L1_CORNER_C_DOWN = 180
+SERVO_L1_CORNER_B_UP = 90      # Corner B: UP = 90° (wadah di atas)
+SERVO_L1_CORNER_B_DOWN = 180   # Corner B: DOWN = 180° (wadah jatuh)
 
-SERVO_L1_CORNER_D_UP = 90      # CW: gunakan default (UP=10°, DOWN=100°)
-SERVO_L1_CORNER_D_DOWN = 180
+SERVO_L1_CORNER_C_UP = 90      # Corner C: UP = 90° (wadah di atas)
+SERVO_L1_CORNER_C_DOWN = 180   # Corner C: DOWN = 180° (wadah jatuh)
+
+SERVO_L1_CORNER_D_UP = 90      # Corner D: UP = 90° (wadah di atas)
+SERVO_L1_CORNER_D_DOWN = 180   # Corner D: DOWN = 180° (wadah jatuh)
 
 # ──────────────────────────────────────────
 # Layer 1 - Lock Servos (2 servo)
@@ -262,9 +273,11 @@ SERVO_L1_CORNER_D_DOWN = 180
 #   LOCKED (90°)   → Servo arm horizontal di bawah wadah (menahan)
 #   UNLOCKED (0°)  → Servo arm vertikal (lepas, wadah bisa jatuh)
 
-# Mapping: 0 dan 2 → Servo Kunci A dan B
-SERVO_L1_LOCK_LEFT_CHANNEL = None   # Servo Kunci A (atas tengah)
-SERVO_L1_LOCK_RIGHT_CHANNEL = None  # Servo Kunci B (bawah tengah)
+# ⚠️ PENTING: Channel PCA9685 untuk servo lock
+# Set None untuk disable lock servos, atau gunakan channel yang sesuai hardware
+# Default hardware: Lock Left=0, Lock Right=2
+SERVO_L1_LOCK_LEFT_CHANNEL = 0   # Servo Kunci Kiri (Channel PCA9685)
+SERVO_L1_LOCK_RIGHT_CHANNEL = 2  # Servo Kunci Kanan (Channel PCA9685)
 
 # Global default (fallback) - tetap disediakan untuk kompatibilitas
 # ⚠️ CRITICAL SAFETY FIX (Gemini Pro 2.5): JANGAN gunakan 0° atau 180°!
@@ -549,8 +562,9 @@ BIN_A_SENSOR_ECHO = 24  # GPIO pin untuk ECHO (input)
 # ─────────────────────────────────────────
 # SENSOR BIN B (Anorganic) - HC-SR04
 # ─────────────────────────────────────────
-BIN_B_SENSOR_TRIG = 5   # GPIO pin untuk TRIG (output) - berbeda dari BIN A!
-BIN_B_SENSOR_ECHO = 6   # GPIO pin untuk ECHO (input) - berbeda dari BIN A!
+# ⚠️ PENTING: GPIO 5/6 kadang digunakan I2C, pindah ke GPIO 27/22 (lebih aman)
+BIN_B_SENSOR_TRIG = 27  # GPIO pin untuk TRIG (output) - AMAN, tidak bentrok!
+BIN_B_SENSOR_ECHO = 22  # GPIO pin untuk ECHO (input) - AMAN, tidak bentrok!
 
 # ─────────────────────────────────────────
 # CALIBRATION (Jarak dalam cm)
