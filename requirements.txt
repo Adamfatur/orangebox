@@ -1,0 +1,42 @@
+# Python dependencies untuk Waste Sorter System
+# 
+# CATATAN PENTING untuk Raspberry Pi:
+# - Jangan install requirements.txt langsung dengan pip di RPi!
+# - Gunakan ./install.sh yang sudah handle konflik library
+# - tflite-runtime HARUS dari apt (python3-tflite-runtime)
+#
+# File ini untuk referensi atau development di macOS/Linux
+
+# Core dependencies
+numpy>=1.21.0
+opencv-python>=4.5.0
+
+# TensorFlow Lite Runtime
+# RASPBERRY PI: SKIP ini, gunakan apt install python3-tflite-runtime
+# macOS/Linux: Uncomment jika perlu
+# tflite-runtime>=2.7.0
+
+# Database
+pymysql>=1.0.0
+
+# GPS Module Support (U-blox NEO-6M)
+pyserial>=3.5
+pynmea2>=1.18.0
+
+# Environment variables
+python-dotenv>=0.19.0
+
+# Hardware: Raspberry Pi GPIO
+# Raspberry Pi only - akan skip otomatis di macOS
+RPi.GPIO>=0.7.1; sys_platform == 'linux'
+gpiozero>=1.6.2; sys_platform == 'linux'
+
+# Hardware: PCA9685 servo support (Raspberry Pi)
+# Gunakan servokit yang sudah include motor functionality
+adafruit-blinka>=8.0.0; sys_platform == 'linux'
+adafruit-circuitpython-pca9685>=3.4.0; sys_platform == 'linux'
+adafruit-circuitpython-servokit>=1.3.0; sys_platform == 'linux'
+
+# IoT Cloud: Blynk untuk monitoring bin capacity
+blynk-library-python>=1.0.0; sys_platform == 'linux'
+
